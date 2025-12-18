@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel Gerente - CEFORSEG</title>
+</head>
+<body>
+
+  <h1>Panel Gerente - CEFORSEG</h1>
+  <p id="bienvenida"></p>
+
+  <hr>
+
+  <h3>Gestión de Usuarios</h3>
+  <ul>
+    <li><a href="#" id="crearSecretaria">Crear Secretaria</a></li>
+    <!-- más roles en el futuro -->
+  </ul>
+
+  <hr>
+
+  <button id="logout">Cerrar sesión</button>
+
+  <p id="mensaje"></p>
+
+  <script>
+    // Verificar token
+    const token = localStorage.getItem('token');
+    const rol = localStorage.getItem('rol');
+
+    if (!token || rol !== 'gerente') {
+      window.location.href = '/login';
+    }
+
+    document.getElementById('bienvenida').innerText =
+      'Bienvenido, rol: ' + rol;
+
+    // Logout
+    document.getElementById('logout').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('rol');
+      window.location.href = '/login';
+    });
+
+    // (Luego conectamos botones a módulos reales)
+  </script>
+
+</body>
+</html>
