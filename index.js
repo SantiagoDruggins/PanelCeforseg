@@ -28,10 +28,12 @@ app.get('/matricular', (req, res) => {
 // Puerto compatible con Linux / Render
 const PORT = process.env.PORT || 3000;
 
-// Ruta principal
+// PAGINA PRINCIPAL LOGIN //
 app.get('/', (req, res) => {
-  res.send('Panel CEFORSEG funcionando 🚀');
+  res.redirect('/login');
 });
+//----------------------------------//
+
 
 app.post('/login', (req, res) => {
   const { usuario, password } = req.body;
