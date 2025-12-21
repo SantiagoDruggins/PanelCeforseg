@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestión de Usuarios - CEFORSEG</title>
+
+  <!-- Bootstrap -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <style>
+    body {
+      background: #f5f6fa;
+    }
+    .container {
+      max-width: 900px;
+    }
+  </style>
+</head>
+<body>
+
+<script>
+  // 🔒 BLOQUEO FRONTEND: SOLO GERENTE
+  if (localStorage.getItem('rol') !== 'gerente') {
+    window.location.href = '/dashboard';
+  }
+</script>
+
+<div class="container mt-5">
+
+  <h2 class="mb-1">Gestión de Usuarios</h2>
+  <p class="text-muted">Administración de accesos al sistema</p>
+
+  <hr>
+
+  <!-- FORMULARIO CREAR USUARIO -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <strong>Crear nuevo usuario</strong>
+    </div>
+    <div class="card-body">
+
+      <form id="formUsuario">
+        <div class="row g-3">
+
+          <div class="col-md-4">
+            <label class="form-label">Usuario</label>
+            <input type="text" id="usuario" class="form-control" required>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Contraseña</label>
+            <input type="password" id="password" class="form-control" required>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Rol</label>
+            <select id="rol" class="form-select" required>
+              <option value="">Seleccione</option>
+              <option value="secretaria">Secretaria</option>
+              <option value="gerente">Gerente</option>
+            </select>
+          </div>
+
+        </div>
+
+        <div class="mt-3">
+          <button class="btn btn-primary">Crear usuario</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- TABLA USUARIOS -->
+  <div class="card">
+    <div class="card-header">
+      <strong>Usuarios registrados</strong>
+    </div>
+    <div class="card-body p-0">
+
+      <table class="table table-striped mb-0 text-center">
+        <thead class="table-dark">
+          <tr>
+            <th>ID</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaUsuarios"></tbody>
+      </table>
+
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <a href="/dashboard.html" class="btn btn-secondary">⬅ Volver al dashboard</a>
+  </div>
+
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+
+  if (!token) {
+    alert('Sesión expirada');
+    window.location.href = '/login';
+  }
+
+  // 🔄 CARGAR USUARIOS
+  async function cargarUsuarios() {
+    const res = await fetch('/usuarios', {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+
+    const usuarios = await res.json();
+    const tabla = document.getElementById('tablaUsuarios');
+    tabla.innerHTML = '';
+
+    usuarios.forEach(u => {
+      const tr = document.createElement('tr');
+
+      const botonEliminar =
+        u.rol === 'gerente'
+          ? '<span class="text-muted">—</span>'
+          : `<button class="btn btn-danger btn-sm" onclick="eliminarUsuario(${u.id})">
+               Eliminar
+             </button>`;
+
+      tr.innerHTML = `
+        <td>${u.id}</td>
+        <td>${u.usuario}</td>
+        <td>${u.rol}</td>
+        <td>${botonEliminar}</td>
+      `;
+
+      tabla.appendChild(tr);
+    });
+  }
+
+  // ➕ CREAR USUARIO
+  document.getElementById('formUsuario').addEventListener('submit', async e => {
+    e.preventDefault();
+
+    const usuario = document.getElementById('usuario').value;
+    const password = document.getElementById('password').value;
+    const rol = document.getElementById('rol').value;
+
+    const res = await fetch('/usuarios', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ usuario, password, rol })
+    });
+
+    const data = await res.json();
+    alert(data.mensaje || 'Usuario creado');
+
+    e.target.reset();
+    cargarUsuarios();
+  });
+
+  // ❌ ELIMINAR USUARIO
+  async function eliminarUsuario(id) {
+    if (!confirm('¿Seguro que deseas eliminar este usuario?')) return;
+
+    const res = await fetch(`/usuarios/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+
+    const data = await res.json();
+    alert(data.mensaje);
+    cargarUsuarios();
+  }
+
+  cargarUsuarios();
+</script>
+
+</body>
+</html>

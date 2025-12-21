@@ -40,7 +40,10 @@
       <a href="/dashboard">📊 Dashboard</a>
       <a href="/cursos-panel">📚 Cursos</a>
       <a href="/estudiantes-panel">👥 Estudiantes</a>
-      <a href="/panel-gerente">👤 Usuarios</a>
+      <a href="/usuarios-panel">👤 Usuarios</a>
+      
+
+
       <hr>
       <a href="#" id="logout">🚪 Cerrar sesión</a>
     </div>
@@ -135,6 +138,12 @@
     localStorage.removeItem('rol');
     window.location.href = '/login';
   });
+</script>
+
+<script>
+  if (localStorage.getItem('rol') !== 'gerente') {
+    document.querySelector('a[href="/usuarios-panel"]')?.remove();
+  }
 </script>
 
 </body>

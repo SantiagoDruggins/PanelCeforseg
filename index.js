@@ -2,247 +2,96 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-require('./db/database');
-const db = require('./db/database');
-
-const { crearUsuario } = require('./auth/auth');
-const { login } = require('./auth/auth');
-const { verificarToken, soloGerente } = require('./middleware/authMiddleware');
 const path = require('path');
 app.use(express.static(path.join(__dirname, 'public')));
-//--------------------------MATRICULAR - PROCESO DIFICIL JAJA--------------------//
-app.get('/matricular', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/matricular.html'));
-});
-//--------------------------------------------------------------------------------//
 
+const db = require('./db/database');
+const { crearUsuario, login } = require('./auth/auth');
+const { verificarToken, permitirRoles } = require('./middleware/authMiddleware');
 
-
-
-
-
-
-
-
-
-// Puerto compatible con Linux / Render
 const PORT = process.env.PORT || 3000;
 
-// PAGINA PRINCIPAL LOGIN //
-app.get('/', (req, res) => {
-  res.redirect('/login');
-});
-//----------------------------------//
+/* ===========================
+   RUTAS HTML (SIN TOKEN)
+=========================== */
+app.get('/', (_, res) => res.redirect('/login'));
+app.get('/login', (_, res) => res.sendFile(__dirname + '/public/login.html'));
+app.get('/dashboard', (_, res) => res.sendFile(__dirname + '/public/dashboard.html'));
+app.get('/usuarios-panel', (_, res) => res.sendFile(__dirname + '/public/usuarios.html'));
+app.get('/cursos-panel', (_, res) => res.sendFile(__dirname + '/public/cursos.html'));
+app.get('/estudiantes-panel', (_, res) => res.sendFile(__dirname + '/public/estudiantes.html'));
+app.get('/matricular', (_, res) => res.sendFile(__dirname + '/public/matricular.html'));
 
-
+/* ===========================
+   LOGIN
+=========================== */
 app.post('/login', (req, res) => {
   const { usuario, password } = req.body;
-
-  if (!usuario || !password) {
-    return res.status(400).json({ mensaje: 'Datos incompletos' });
-  }
-
-  login(usuario, password, (resultado) => {
-    if (!resultado) {
+  login(usuario, password, data => {
+    if (!data) {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas' });
     }
-
-    res.json(resultado);
+    res.json(data);
   });
 });
 
-
-app.get('/admin', verificarToken, soloGerente, (req, res) => {
-  res.json({
-    mensaje: 'Bienvenido al panel de gerente',
-    usuario: req.usuario
+/* ===========================
+   USUARIOS (SOLO GERENTE)
+=========================== */
+app.get('/usuarios', verificarToken, permitirRoles('gerente'), (req, res) => {
+  db.all('SELECT id, usuario, rol FROM usuarios', [], (_, rows) => {
+    res.json(rows);
   });
 });
 
-app.post('/usuarios/secretaria', verificarToken, soloGerente, (req, res) => {
-  const { usuario, password } = req.body;
-
-  if (!usuario || !password) {
-    return res.status(400).json({ mensaje: 'Datos incompletos' });
-  }
-
-  crearUsuario(usuario, password, 'secretaria');
-  res.json({ mensaje: 'Secretaria creada correctamente' });
+app.post('/usuarios', verificarToken, permitirRoles('gerente'), (req, res) => {
+  const { usuario, password, rol } = req.body;
+  crearUsuario(usuario, password, rol);
+  res.json({ mensaje: 'Usuario creado correctamente' });
 });
 
-//ruta gerente protegida
-app.get('/panel-gerente', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/admin.html'));
-});
-
-
-//ruta login fronted
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/login.html'));
-});
-
-//CREACION DE CURSOS, SOLO GERENTE.
-app.post('/cursos', verificarToken, soloGerente, (req, res) => {
-  const { nombre, descripcion, precio } = req.body;
-
-  if (!nombre || !precio) {
-    return res.status(400).json({ mensaje: 'Nombre y precio son obligatorios' });
-  }
-
-  db.run(
-    'INSERT INTO cursos (nombre, descripcion, precio) VALUES (?, ?, ?)',
-    [nombre, descripcion || '', precio],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ mensaje: 'Error al crear curso' });
-      }
-
-      res.json({
-        mensaje: 'Curso creado correctamente',
-        id: this.lastID
-      });
-    }
-  );
-});
-
-//VER CURSOS Y ASIGNAR SECRETARIA
-app.get('/cursos', verificarToken, (req, res) => {
-  db.all(
-    'SELECT * FROM cursos WHERE activo = 1',
-    [],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ mensaje: 'Error al obtener cursos' });
-      }
-      res.json(rows);
-    }
-  );
-});
-
-//DESACTIVAR CURSOS O ACTIVAR - GERENTE
-app.put('/cursos/:id/desactivar', verificarToken, soloGerente, (req, res) => {
+app.delete('/usuarios/:id', verificarToken, permitirRoles('gerente'), (req, res) => {
   const { id } = req.params;
 
-  db.run(
-    'UPDATE cursos SET activo = 0 WHERE id = ?',
+  // No permitir borrar al propio usuario
+  if (parseInt(id) === req.usuario.id) {
+    return res.status(400).json({ mensaje: 'No puedes eliminar tu propio usuario' });
+  }
+
+  // 1️⃣ Obtener el rol del usuario a eliminar
+  db.get(
+    'SELECT rol FROM usuarios WHERE id = ?',
     [id],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ mensaje: 'Error al desactivar curso' });
+    (err, user) => {
+      if (err || !user) {
+        return res.status(404).json({ mensaje: 'Usuario no encontrado' });
       }
 
-      res.json({ mensaje: 'Curso desactivado' });
-    }
-  );
-});
-
-//MATRICULAR ESTUDIANTE, GERENTE Y SECRETARIA
-app.post('/estudiantes', verificarToken, (req, res) => {
-  const { nombre, cedula, telefono, ciudad, direccion, curso_id } = req.body;
-
-  if (!nombre || !cedula || !curso_id) {
-    return res.status(400).json({ mensaje: 'Datos obligatorios faltantes' });
-  }
-
-  // Obtener precio del curso
-  db.get(
-    'SELECT precio FROM cursos WHERE id = ? AND activo = 1',
-    [curso_id],
-    (err, curso) => {
-      if (err || !curso) {
-        return res.status(400).json({ mensaje: 'Curso no válido' });
+      // 2️⃣ Si NO es gerente → eliminar directo
+      if (user.rol !== 'gerente') {
+        db.run(
+          'DELETE FROM usuarios WHERE id = ?',
+          [id],
+          () => res.json({ mensaje: 'Usuario eliminado correctamente' })
+        );
+        return;
       }
 
-      const precio = curso.precio;
-
-      db.run(
-        `INSERT INTO estudiantes 
-        (nombre, cedula, telefono, ciudad, direccion, curso_id, precio_curso, saldo)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          nombre,
-          cedula,
-          telefono || '',
-          ciudad || '',
-          direccion || '',
-          curso_id,
-          precio,
-          precio
-        ],
-        function (err) {
-          if (err) {
-            return res.status(500).json({ mensaje: 'Error al matricular estudiante' });
-          }
-
-          res.json({
-            mensaje: 'Estudiante matriculado correctamente',
-            id: this.lastID
-          });
-        }
-      );
-    }
-  );
-});
-
-//LISTA O VER ESTUDIANTES - AMBOS ROLES
-app.get('/estudiantes', verificarToken, (req, res) => {
-  db.all(
-    `SELECT e.*, c.nombre AS curso_nombre
-     FROM estudiantes e
-     JOIN cursos c ON e.curso_id = c.id`,
-    [],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ mensaje: 'Error al obtener estudiantes' });
-      }
-      res.json(rows);
-    }
-  );
-});
-// registrar abono !!
-app.post('/abonos', verificarToken, (req, res) => {
-  const { estudiante_id, valor } = req.body;
-
-  if (!estudiante_id || !valor) {
-    return res.status(400).json({ mensaje: 'Datos incompletos' });
-  }
-
-  db.get(
-    'SELECT saldo FROM estudiantes WHERE id = ?',
-    [estudiante_id],
-    (err, estudiante) => {
-      if (err || !estudiante) {
-        return res.status(400).json({ mensaje: 'Estudiante no encontrado' });
-      }
-
-      if (valor > estudiante.saldo) {
-        return res.status(400).json({ mensaje: 'El abono supera el saldo' });
-      }
-
-      const nuevoSaldo = estudiante.saldo - valor;
-      const fecha = new Date().toISOString();
-
-      db.run(
-        'INSERT INTO abonos (estudiante_id, valor, fecha, usuario_id) VALUES (?, ?, ?, ?)',
-        [estudiante_id, valor, fecha, req.usuario.id],
-        function (err) {
-          if (err) {
-            return res.status(500).json({ mensaje: 'Error al registrar abono' });
+      // 3️⃣ Si ES gerente → verificar que no sea el último
+      db.get(
+        'SELECT COUNT(*) AS total FROM usuarios WHERE rol = "gerente"',
+        [],
+        (_, row) => {
+          if (row.total <= 1) {
+            return res.status(400).json({
+              mensaje: 'Debe existir al menos un gerente en el sistema'
+            });
           }
 
           db.run(
-            'UPDATE estudiantes SET saldo = ? WHERE id = ?',
-            [nuevoSaldo, estudiante_id],
-            function (err) {
-              if (err) {
-                return res.status(500).json({ mensaje: 'Error al actualizar saldo' });
-              }
-
-              res.json({
-                mensaje: 'Abono registrado correctamente',
-                saldo_actual: nuevoSaldo
-              });
-            }
+            'DELETE FROM usuarios WHERE id = ?',
+            [id],
+            () => res.json({ mensaje: 'Gerente eliminado correctamente' })
           );
         }
       );
@@ -250,46 +99,126 @@ app.post('/abonos', verificarToken, (req, res) => {
   );
 });
 
-// ver abonos
-app.get('/abonos/:estudiante_id', verificarToken, (req, res) => {
-  const { estudiante_id } = req.params;
+/* ===========================
+   CURSOS
+=========================== */
+app.get('/cursos', verificarToken, permitirRoles('gerente','secretaria'), (req, res) => {
+  db.all('SELECT * FROM cursos WHERE activo = 1', [], (_, rows) => {
+    res.json(rows);
+  });
+});
 
-  db.all(
-    `SELECT a.id, a.valor, a.fecha, u.usuario AS registrado_por
-     FROM abonos a
-     LEFT JOIN usuarios u ON a.usuario_id = u.id
-     WHERE a.estudiante_id = ?`,
-    [estudiante_id],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ mensaje: 'Error al obtener abonos' });
-      }
-      res.json(rows);
+app.post('/cursos', verificarToken, permitirRoles('gerente','secretaria'), (req, res) => {
+  const { nombre, descripcion, precio } = req.body;
+  if (!nombre || !precio) {
+    return res.status(400).json({ mensaje: 'Datos incompletos' });
+  }
+
+  db.run(
+    'INSERT INTO cursos (nombre, descripcion, precio) VALUES (?,?,?)',
+    [nombre, descripcion || '', precio],
+    function () {
+      res.json({ mensaje: 'Curso creado correctamente', id: this.lastID });
     }
   );
 });
 
-//--------------------------------ESTUDIANTES PAGINA--------------------------------
-app.get('/estudiantes-panel', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/estudiantes.html'));
+app.put('/cursos/:id/desactivar', verificarToken, permitirRoles('gerente'), (req, res) => {
+  db.run('UPDATE cursos SET activo = 0 WHERE id = ?', [req.params.id]);
+  res.json({ mensaje: 'Curso desactivado' });
 });
 
-//ver cursos//
-app.get('/cursos-panel', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/cursos.html'));
+/* ===========================
+   ESTUDIANTES
+=========================== */
+app.get('/estudiantes', verificarToken, permitirRoles('gerente','secretaria'), (req, res) => {
+  db.all(
+    `SELECT e.*, c.nombre AS curso_nombre
+     FROM estudiantes e
+     JOIN cursos c ON e.curso_id = c.id`,
+    [],
+    (_, rows) => res.json(rows)
+  );
 });
-//ver cursos//
 
-//------------------------------------------------------------------------//
+app.post('/estudiantes', verificarToken, permitirRoles('gerente','secretaria'), (req, res) => {
+  const { nombre, cedula, telefono, ciudad, vivienda, curso_id } = req.body;
 
-//---------RUTA PARA EL DASHBOARD------------//
-app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/dashboard.html'));
+  if (!nombre || !cedula || !curso_id) {
+    return res.status(400).json({ mensaje: 'Datos obligatorios faltantes' });
+  }
+
+  db.get('SELECT precio FROM cursos WHERE id = ?', [curso_id], (_, curso) => {
+    if (!curso) {
+      return res.status(400).json({ mensaje: 'Curso no válido' });
+    }
+
+    db.run(
+      `INSERT INTO estudiantes
+      (nombre, cedula, telefono, ciudad, direccion, curso_id, precio_curso, saldo)
+      VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        nombre,
+        cedula,
+        telefono || '',
+        ciudad || '',
+        vivienda || '',
+        curso_id,
+        curso.precio,
+        curso.precio
+      ],
+      function () {
+        res.json({ mensaje: 'Estudiante matriculado correctamente', id: this.lastID });
+      }
+    );
+  });
 });
-//---------------------------------------------//
 
+/* ===========================
+   ABONOS
+=========================== */
+app.post('/abonos', verificarToken, permitirRoles('gerente','secretaria'), (req, res) => {
+  const { estudiante_id, valor } = req.body;
 
-// Arrancar servidor
+  if (!estudiante_id || !valor) {
+    return res.status(400).json({ mensaje: 'Datos incompletos' });
+  }
+
+  db.get('SELECT saldo FROM estudiantes WHERE id = ?', [estudiante_id], (_, est) => {
+    if (!est || valor > est.saldo) {
+      return res.status(400).json({ mensaje: 'Abono inválido' });
+    }
+
+    const nuevoSaldo = est.saldo - valor;
+
+    db.run(
+      'INSERT INTO abonos (estudiante_id, valor, fecha, usuario_id) VALUES (?,?,?,?)',
+      [estudiante_id, valor, new Date().toISOString(), req.usuario.id]
+    );
+
+    db.run(
+      'UPDATE estudiantes SET saldo = ? WHERE id = ?',
+      [nuevoSaldo, estudiante_id]
+    );
+
+    res.json({ mensaje: 'Abono registrado', saldo_actual: nuevoSaldo });
+  });
+});
+
+app.get('/abonos/:id', verificarToken, permitirRoles('gerente','secretaria'), (req, res) => {
+  db.all(
+    `SELECT a.fecha, a.valor, u.usuario
+     FROM abonos a
+     LEFT JOIN usuarios u ON a.usuario_id = u.id
+     WHERE a.estudiante_id = ?`,
+    [req.params.id],
+    (_, rows) => res.json(rows)
+  );
+});
+
+/* ===========================
+   SERVER
+=========================== */
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log('Servidor OK en puerto', PORT);
 });

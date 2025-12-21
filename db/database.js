@@ -53,7 +53,7 @@ db.run(`
 `);
 
 
-//abonos - al curso
+
 // Crear tabla abonos
 db.run(`
   CREATE TABLE IF NOT EXISTS abonos (

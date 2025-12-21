@@ -49,6 +49,16 @@
     <div class="col-10 p-4">
 
       <h2 class="mb-4">Estudiantes matriculados</h2>
+      
+      <div class="mb-3">
+      <input
+      type="text"
+      id="buscador"
+      class="form-control"
+      placeholder="Buscar por nombre o cédula..."
+  >
+</div>
+
 
       <div class="card">
         <div class="card-body">
@@ -121,11 +131,13 @@
     estudiantesCache.forEach(e => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <tr>
         <td>${e.nombre}</td>
         <td>${e.cedula}</td>
-        <td>${e.curso}</td>
+        <td>${e.curso_nombre}</td>  <!-- ✅ -->
         <td>${money(e.precio_curso)}</td>
         <td>${money(e.saldo)}</td>
+
         <td>
           <button class="btn btn-warning btn-sm me-1" onclick="editar(${e.id})">Editar</button>
           <button class="btn btn-danger btn-sm" onclick="eliminar(${e.id})">Eliminar</button>
