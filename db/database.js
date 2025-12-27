@@ -67,6 +67,16 @@ db.run(`
 `);
 
 
+db.run(`
+  ALTER TABLE estudiantes ADD COLUMN foto TEXT
+`, () => {});
+
+// ✅ Intentar agregar columna foto (si ya existe, no pasa nada)
+db.run(`ALTER TABLE estudiantes ADD COLUMN foto TEXT`, (err) => {
+  // Si ya existe, SQLite tira error, pero lo ignoramos
+});
+
+
 
 
 module.exports = db;
