@@ -1,69 +1,89 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Estudiantes - CEFORSEG</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<meta charset="UTF-8">
+<title>Estudiantes - CEFORSEG</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 
-<body class="bg-light">
+<body>
 
-<div class="container mt-4">
-  <a href="dashboard.html"><button><h5>Salir - Panel</h5></button></a>
-  <h3>👥 Estudiantes</h3>
+<script>
+if(!localStorage.getItem('token')){
+  location.href='/login';
+}
+</script>
 
-  <table class="table table-bordered table-hover mt-3">
-    <thead class="table-dark">
-      <tr>
-        <th>Nombre</th>
-        <th>Cédula</th>
-        <th>Curso</th>
-        <th>Saldo</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody id="tablaEstudiantes"></tbody>
-  </table>
-</div>
+<div id="app"></div>
 
 <script>
 const token = localStorage.getItem('token');
-if (!token) location.href = '/login';
 
-async function cargarEstudiantes() {
-  const res = await fetch('/api/estudiantes', {
-    headers: {
-      'Authorization': 'Bearer ' + token
-    }
+fetch('/layout.html')
+  .then(r=>r.text())
+  .then(html=>{
+    document.getElementById('app').innerHTML = html;
+    const content = document.querySelector('.content');
+
+    content.innerHTML = `
+      <h3 class="mb-4">👥 Estudiantes</h3>
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Nombre</th>
+              <th>Cédula</th>
+              <th>Cursos</th>
+              <th>Saldo</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tablaEstudiantes"></tbody>
+        </table>
+      </div>
+    `;
+
+    cargarEstudiantes();
   });
 
-  if (!res.ok) {
-    alert('Error cargando estudiantes');
-    return;
-  }
-
+async function cargarEstudiantes(){
+  const res = await fetch('/api/estudiantes',{
+    headers:{ Authorization:'Bearer '+token }
+  });
   const data = await res.json();
   const tabla = document.getElementById('tablaEstudiantes');
   tabla.innerHTML = '';
 
-  data.forEach(e => {
+  data.forEach(e=>{
     tabla.innerHTML += `
       <tr>
         <td>${e.nombre}</td>
         <td>${e.cedula}</td>
-        <td>${e.curso_nombre}</td>
-        <td>$${Number(e.saldo).toLocaleString()}</td>
+        <td>${e.cursos || '-'}</td>
+        <td>$${Number(e.saldo || 0).toLocaleString()}</td>
         <td>
           <a href="/estudiante-ficha?id=${e.id}" class="btn btn-primary btn-sm">
             Ver ficha
           </a>
+          <button class="btn btn-danger btn-sm ms-1" onclick="eliminar(${e.id})">
+            Eliminar
+          </button>
         </td>
       </tr>
     `;
   });
 }
 
-cargarEstudiantes();
+async function eliminar(id){
+  if(!confirm('¿Eliminar estudiante?')) return;
+  await fetch('/api/estudiantes/'+id,{
+    method:'DELETE',
+    headers:{ Authorization:'Bearer '+token }
+  });
+  cargarEstudiantes();
+}
 </script>
 
 </body>

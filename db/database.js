@@ -1,10 +1,10 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-// Ruta segura (Windows / Linux)
+// Ruta segura DB
 const dbPath = path.join(__dirname, 'panelceforseg.db');
 
-// Crear / conectar base de datos
+// Conexión
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Error al conectar la base de datos', err);
@@ -13,7 +13,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Crear tabla usuarios
+/* =========================
+   USUARIOS
+========================= */
 db.run(`
   CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +25,9 @@ db.run(`
   )
 `);
 
-// Crear tabla cursos
+/* =========================
+   CURSOS
+========================= */
 db.run(`
   CREATE TABLE IF NOT EXISTS cursos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,8 +38,9 @@ db.run(`
   )
 `);
 
-
-// Crear tabla estudiantes
+/* =========================
+   ESTUDIANTES
+========================= */
 db.run(`
   CREATE TABLE IF NOT EXISTS estudiantes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,40 +49,58 @@ db.run(`
     telefono TEXT,
     ciudad TEXT,
     direccion TEXT,
-    curso_id INTEGER,
-    precio_curso INTEGER,
-    saldo INTEGER,
     estado TEXT DEFAULT 'activo',
+    foto TEXT
+  )
+`);
+
+/* =========================
+   ESTUDIANTE ↔ CURSOS
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS estudiante_cursos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    estudiante_id INTEGER,
+    curso_id INTEGER,
+    precio INTEGER,
+    saldo INTEGER,
+    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
     FOREIGN KEY (curso_id) REFERENCES cursos(id)
   )
 `);
 
-
-
-// Crear tabla abonos
+/* =========================
+   ABONOS (POR CURSO)
+========================= */
 db.run(`
   CREATE TABLE IF NOT EXISTS abonos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     estudiante_id INTEGER,
+    curso_id INTEGER,
     valor INTEGER,
     fecha TEXT,
     usuario_id INTEGER,
-    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id)
+    nota TEXT,
+    rol TEXT,
+    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
+    FOREIGN KEY (curso_id) REFERENCES cursos(id)
   )
 `);
 
-
+/* =========================
+   CERTIFICADOS (NUEVO)
+========================= */
 db.run(`
-  ALTER TABLE estudiantes ADD COLUMN foto TEXT
-`, () => {});
-
-// ✅ Intentar agregar columna foto (si ya existe, no pasa nada)
-db.run(`ALTER TABLE estudiantes ADD COLUMN foto TEXT`, (err) => {
-  // Si ya existe, SQLite tira error, pero lo ignoramos
-});
-
-
-
+  CREATE TABLE IF NOT EXISTS certificados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    estudiante_id INTEGER,
+    curso_id INTEGER,
+    archivo_pdf TEXT,
+    fecha_emision TEXT,
+    estado TEXT DEFAULT 'valido',
+    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
+    FOREIGN KEY (curso_id) REFERENCES cursos(id)
+  )
+`);
 
 module.exports = db;
-
