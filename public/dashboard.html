@@ -18,13 +18,15 @@ if(!localStorage.getItem('token')) location.href='/login';
 fetch('/layout.html')
 .then(r=>r.text())
 .then(html=>{
-  document.getElementById('app').innerHTML=html;
-  const content=document.querySelector('.content');
+  document.getElementById('app').innerHTML = html;
+  const content = document.querySelector('.content');
 
-  content.innerHTML=`
-  <h3 class="fw-bold mb-4">📊 Dashboard</h3>
+  content.innerHTML = `
+  <h3 class="fw-bold mb-4">📊 Resumen</h3>
+
   <div class="row g-4">
-    <div class="col-md-4">
+
+    <div class="col-md-3">
       <div class="card shadow rounded-4">
         <div class="card-body">
           <small>Total Estudiantes</small>
@@ -32,7 +34,8 @@ fetch('/layout.html')
         </div>
       </div>
     </div>
-    <div class="col-md-4">
+
+    <div class="col-md-3">
       <div class="card shadow rounded-4">
         <div class="card-body">
           <small>Cursos Activos</small>
@@ -40,26 +43,52 @@ fetch('/layout.html')
         </div>
       </div>
     </div>
-    <div class="col-md-4">
+
+    <div class="col-md-3">
       <div class="card shadow rounded-4">
         <div class="card-body">
-          <small>Recaudo Total</small>
-          <h2 class="text-success" id="totalRecaudo">$0</h2>
+          <small>Recaudo HOY</small>
+          <h2 class="text-success" id="recaudoHoy">$0</h2>
         </div>
       </div>
     </div>
-  </div>`;
+
+    <div class="col-md-3">
+      <div class="card shadow rounded-4">
+        <div class="card-body">
+          <small>Deuda Total</small>
+          <h2 class="text-danger" id="deudaTotal">$0</h2>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-md-4">
+      <div class="card shadow rounded-4">
+        <div class="card-body">
+          <small>Alumnos con Deuda</small>
+          <h2 id="alumnosDeudores">0</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+  `;
 
   fetch('/api/dashboard',{
-    headers:{Authorization:'Bearer '+localStorage.getItem('token')}
+    headers:{ Authorization:'Bearer '+localStorage.getItem('token') }
   })
   .then(r=>r.json())
   .then(d=>{
-    totalEstudiantes.innerText=d.estudiantes;
-    totalCursos.innerText=d.cursos;
-    totalRecaudo.innerText='$'+d.recaudo.toLocaleString();
+    document.getElementById('totalEstudiantes').innerText = d.estudiantes;
+    document.getElementById('totalCursos').innerText = d.cursos;
+    document.getElementById('recaudoHoy').innerText = '$' + Number(d.recaudo_hoy).toLocaleString();
+    document.getElementById('deudaTotal').innerText = '$' + Number(d.deuda_total).toLocaleString();
+    document.getElementById('alumnosDeudores').innerText = d.alumnos_deudores;
   });
 });
 </script>
+
 </body>
 </html>

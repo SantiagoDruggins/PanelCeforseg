@@ -19,13 +19,12 @@ body{
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* Layout principal */
 .app{
   display:flex;
   min-height:100vh;
 }
 
-/* Sidebar */
+/* SIDEBAR */
 .sidebar{
   width:var(--sidebar-width);
   background:var(--azul);
@@ -34,12 +33,26 @@ body{
   flex-shrink:0;
 }
 
-.sidebar h5{
-  text-align:center;
-  font-weight:600;
+/* LOGO */
+.logo-box{
+  display:flex;
+  align-items:center;
+  gap:10px;
   margin-bottom:20px;
 }
 
+.logo-box img{
+  width:38px;
+  height:38px;
+  object-fit:contain;
+}
+
+.logo-box span{
+  font-weight:700;
+  font-size:18px;
+}
+
+/* MENU */
 .sidebar a{
   color:#fff;
   text-decoration:none;
@@ -60,18 +73,16 @@ body{
   border-color:rgba(255,255,255,.25);
 }
 
-/* Contenido */
+/* CONTENIDO */
 .content{
   flex:1;
   padding:24px;
   background:#f4f6f9;
 }
 
-/* Responsive */
 @media(max-width:768px){
   .sidebar{
     width:100%;
-    min-height:auto;
   }
   .app{
     flex-direction:column;
@@ -86,45 +97,46 @@ body{
 
   <!-- SIDEBAR -->
   <aside class="sidebar">
-    <h5>CEFORSEG</h5>
+
+    <!-- LOGO -->
+    <div class="logo-box">
+      <img src="../assets/descarga-Photoroom.png" alt="CEFORSEG">
+      <span>CEFORSEG</span>
+    </div>
+
     <hr>
 
-    <a href="/dashboard">📊 <span>Dashboard</span></a>
+    <a href="/dashboard">📊 <span>Resumen</span></a>
     <a href="/estudiantes-panel">👥 <span>Estudiantes</span></a>
     <a href="/matricular">➕ <span>Matricular</span></a>
     <a href="/cursos-panel">📚 <span>Cursos</span></a>
-
-    <!-- 🔹 NUEVA SECCIÓN -->
     <a href="/certificados-panel">📄 <span>Certificados</span></a>
-
     <a href="/usuarios-panel" id="menuUsuarios">👤 <span>Usuarios</span></a>
+    <a href="/cierre-caja">💰 <span>Cierre de Caja</span></a>
+    <a href="/cierres-caja-panel">📋 <span>Historial Cierres</span></a>
+
 
     <hr>
 
     <a href="#" id="btnLogout">🚪 <span>Salir</span></a>
+
   </aside>
 
   <!-- CONTENIDO -->
-  <main class="content">
-    <!-- AQUÍ SE CARGA CADA PÁGINA -->
-  </main>
+  <main class="content"></main>
 
 </div>
 
 <script>
-/* LOGOUT */
-document.getElementById('btnLogout').addEventListener('click', function(e){
+document.getElementById('btnLogout').addEventListener('click', e=>{
   e.preventDefault();
-  localStorage.removeItem('token');
-  localStorage.removeItem('rol');
-  localStorage.removeItem('usuario');
-  location.href = '/login';
+  localStorage.clear();
+  location.href='/login';
 });
 
-/* CONTROL DE ROL */
 if(localStorage.getItem('rol') !== 'gerente'){
   const u = document.getElementById('menuUsuarios');
-  if(u) u.style.display = 'none';
+  if(u) u.style.display='none';
 }
 </script>
 

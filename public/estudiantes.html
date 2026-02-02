@@ -19,42 +19,69 @@ if(!localStorage.getItem('token')){
 
 <script>
 const token = localStorage.getItem('token');
+let estudiantes = [];   // 🔑 array maestro
 
 fetch('/layout.html')
-  .then(r=>r.text())
-  .then(html=>{
-    document.getElementById('app').innerHTML = html;
-    const content = document.querySelector('.content');
+.then(r=>r.text())
+.then(html=>{
+  document.getElementById('app').innerHTML = html;
+  const content = document.querySelector('.content');
 
-    content.innerHTML = `
-      <h3 class="mb-4">👥 Estudiantes</h3>
+  content.innerHTML = `
+    <h3 class="mb-4">👥 Estudiantes</h3>
 
-      <div class="table-responsive">
-        <table class="table table-bordered align-middle">
-          <thead class="table-dark">
-            <tr>
-              <th>Nombre</th>
-              <th>Cédula</th>
-              <th>Cursos</th>
-              <th>Saldo</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tablaEstudiantes"></tbody>
-        </table>
-      </div>
-    `;
+    <div class="mb-3">
+      <input
+        type="text"
+        id="buscador"
+        class="form-control"
+        placeholder="🔍 Buscar por nombre, cédula o teléfono..."
+        oninput="buscarEstudiantes()"
+      >
+    </div>
 
-    cargarEstudiantes();
-  });
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>Nombre</th>
+            <th>Cédula</th>
+            <th>Cursos</th>
+            <th>Saldo</th>
+            <th style="width:220px">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaEstudiantes"></tbody>
+      </table>
+    </div>
+  `;
+
+  cargarEstudiantes();
+});
 
 async function cargarEstudiantes(){
   const res = await fetch('/api/estudiantes',{
     headers:{ Authorization:'Bearer '+token }
   });
-  const data = await res.json();
+
+  estudiantes = await res.json(); // 🔑 guardar todo
+  renderTabla(estudiantes);
+}
+
+function renderTabla(data){
   const tabla = document.getElementById('tablaEstudiantes');
   tabla.innerHTML = '';
+
+  if(data.length === 0){
+    tabla.innerHTML = `
+      <tr>
+        <td colspan="5" class="text-center text-muted">
+          No se encontraron estudiantes
+        </td>
+      </tr>
+    `;
+    return;
+  }
 
   data.forEach(e=>{
     tabla.innerHTML += `
@@ -67,6 +94,9 @@ async function cargarEstudiantes(){
           <a href="/estudiante-ficha?id=${e.id}" class="btn btn-primary btn-sm">
             Ver ficha
           </a>
+          <a href="/estudiante-ficha?id=${e.id}&edit=1" class="btn btn-warning btn-sm ms-1">
+            Editar
+          </a>
           <button class="btn btn-danger btn-sm ms-1" onclick="eliminar(${e.id})">
             Eliminar
           </button>
@@ -76,12 +106,31 @@ async function cargarEstudiantes(){
   });
 }
 
+function buscarEstudiantes(){
+  const q = document.getElementById('buscador').value.toLowerCase().trim();
+
+  if(!q){
+    renderTabla(estudiantes);
+    return;
+  }
+
+  const filtrados = estudiantes.filter(e =>
+    e.nombre.toLowerCase().includes(q) ||
+    String(e.cedula).includes(q) ||
+    (e.telefono && e.telefono.includes(q))
+  );
+
+  renderTabla(filtrados);
+}
+
 async function eliminar(id){
   if(!confirm('¿Eliminar estudiante?')) return;
+
   await fetch('/api/estudiantes/'+id,{
     method:'DELETE',
     headers:{ Authorization:'Bearer '+token }
   });
+
   cargarEstudiantes();
 }
 </script>
