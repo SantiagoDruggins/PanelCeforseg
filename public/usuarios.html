@@ -90,11 +90,13 @@ async function cargarUsuarios(){
   const tabla = document.getElementById('tablaUsuarios');
   tabla.innerHTML = '';
 
+  const usuarioActual = localStorage.getItem('usuario') || '';
+
   usuarios.forEach(u => {
-    const eliminar =
-      u.rol === 'gerente'
-        ? '<span class="text-muted">—</span>'
-        : `<button class="btn btn-danger btn-sm" onclick="eliminarUsuario(${u.id})">Eliminar</button>`;
+    const esActual = String(u.usuario || '') === usuarioActual;
+    const eliminar = esActual
+      ? '<span class="text-muted" title="No puedes eliminar tu propio usuario">—</span>'
+      : `<button class="btn btn-danger btn-sm" onclick="eliminarUsuario(${u.id})">Eliminar</button>`;
 
     tabla.innerHTML += `
       <tr>

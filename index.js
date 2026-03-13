@@ -181,25 +181,34 @@ app.post('/api/usuarios',
     );
 });
 
-/* ELIMINAR USUARIO (PROTEGE GERENTE) */
+/* ELIMINAR USUARIO (EVITA BORRARSE A SÍ MISMO) */
 app.delete('/api/usuarios/:id',
   verificarToken,
   permitirRoles('gerente'),
   (req, res) => {
 
     db.get(
-      'SELECT rol FROM usuarios WHERE id=?',
+      'SELECT id, rol FROM usuarios WHERE id=?',
       [req.params.id],
       (_, row) => {
 
-        if(row?.rol === 'gerente'){
-          return res.status(403).json({ mensaje:'No se puede eliminar un gerente' });
+        if(!row){
+          return res.status(404).json({ mensaje:'Usuario no encontrado' });
+        }
+
+        if(Number(row.id) === Number(req.usuario.id)){
+          return res.status(403).json({ mensaje:'No puedes eliminar tu propio usuario' });
         }
 
         db.run(
           'DELETE FROM usuarios WHERE id=?',
           [req.params.id],
-          () => res.json({ mensaje:'Usuario eliminado' })
+          function(){
+            if(this.changes === 0){
+              return res.status(404).json({ mensaje:'Usuario no encontrado' });
+            }
+            res.json({ mensaje:'Usuario eliminado' });
+          }
         );
       }
     );
@@ -215,6 +224,19 @@ fs.mkdirSync(FOTO_DIR, { recursive: true });
 const uploadFoto = multer({
   storage: multer.diskStorage({
     destination: FOTO_DIR,
+    filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname)
+  })
+});
+
+/* =====================================================
+   CERTIFICADOS (SUBIDA DE PDF)
+===================================================== */
+const CERT_DIR = path.join(__dirname, 'public/uploads/certificados');
+fs.mkdirSync(CERT_DIR, { recursive: true });
+
+const uploadCert = multer({
+  storage: multer.diskStorage({
+    destination: CERT_DIR,
     filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname)
   })
 });
@@ -499,6 +521,23 @@ app.get('/api/cierres-caja',
     });
 });
 
+/* ELIMINAR CIERRE DE CAJA (SOLO GERENTE) */
+app.delete('/api/cierres-caja/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.run(
+      'DELETE FROM cierres_caja WHERE id=?',
+      [req.params.id],
+      function(){
+        if(this.changes === 0){
+          return res.status(404).json({ mensaje:'Cierre no encontrado' });
+        }
+        res.json({ mensaje:'Cierre eliminado' });
+      }
+    );
+});
+
 
 app.get('/cierres-caja-panel', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/cierres-caja.html'))
@@ -639,16 +678,134 @@ app.get('/api/estudiantes/buscar',
 });
 
 
+/* =====================================================
+   SUBIR CERTIFICADOS (PDF)
+===================================================== */
+app.post('/api/certificados',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  uploadCert.single('pdf'),
+  (req, res) => {
+
+    const { cedula, nombre, curso, fecha_diploma } = req.body;
+
+    if(!cedula || !curso){
+      return res.status(400).json({ mensaje:'Cédula y curso son obligatorios' });
+    }
+
+    if(!req.file){
+      return res.status(400).json({ mensaje:'Debe adjuntar un archivo PDF' });
+    }
+
+    const rutaPdf = `/uploads/certificados/${req.file.filename}`;
+    const fechaEmision = fecha_diploma || new Date().toISOString().slice(0,10);
+
+    db.serialize(() => {
+
+      // 1️⃣ Buscar o crear estudiante por cédula
+      db.get(
+        'SELECT id FROM estudiantes WHERE cedula=?',
+        [cedula],
+        (err, est) => {
+          if(err){
+            return res.status(500).json({ mensaje:'Error buscando estudiante' });
+          }
+
+          const continuarConEstudiante = (estudianteId) => {
+
+            // 2️⃣ Buscar o crear curso por nombre
+            db.get(
+              'SELECT id FROM cursos WHERE nombre=?',
+              [curso],
+              (err2, c) => {
+                if(err2){
+                  return res.status(500).json({ mensaje:'Error buscando curso' });
+                }
+
+                const continuarConCurso = (cursoId) => {
+
+                  // 3️⃣ Registrar certificado (compatibilidad con tabla existente)
+                  db.run(`
+                    INSERT INTO certificados
+                    (estudiante_id, cedula, nombre, curso, fecha_diploma, tipo, archivo_pdf, fecha_subida, curso_id, fecha_emision)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
+                  `,
+                  [
+                    estudianteId,
+                    cedula,
+                    nombre || cedula,
+                    curso,
+                    fechaEmision,
+                    'nuevo',
+                    rutaPdf,
+                    new Date().toISOString(),
+                    cursoId,
+                    fechaEmision
+                  ],
+                  err3 => {
+                    if(err3){
+                      console.error('Error insertando certificado:', err3.message);
+                      return res.status(500).json({ mensaje:'Error guardando certificado: ' + err3.message });
+                    }
+                    res.json({ mensaje:'Certificado subido correctamente' });
+                  });
+                };
+
+                if(c){
+                  continuarConCurso(c.id);
+                } else {
+                  db.run(
+                    'INSERT INTO cursos (nombre, descripcion, precio) VALUES (?,?,?)',
+                    [curso, null, 0],
+                    function(errCreateCurso){
+                      if(errCreateCurso){
+                        return res.status(500).json({ mensaje:'Error creando curso' });
+                      }
+                      continuarConCurso(this.lastID);
+                    }
+                  );
+                }
+              }
+            );
+          };
+
+          if(est){
+            continuarConEstudiante(est.id);
+          } else {
+            db.run(`
+              INSERT INTO estudiantes
+              (nombre, cedula, telefono, ciudad, direccion, estado, foto)
+              VALUES (?,?,?,?,?,?,?)
+            `,
+            [nombre || cedula, cedula, '', '', '', 'activo', null],
+            function(errCreateEst){
+              if(errCreateEst){
+                return res.status(500).json({ mensaje:'Error creando estudiante' });
+              }
+              continuarConEstudiante(this.lastID);
+            });
+          }
+        }
+      );
+    });
+});
+
 
 /* =====================================================
    VALIDAR CERTIFICADOS
 ===================================================== */
 app.get('/api/validar/:cedula', (req, res) => {
   db.all(`
-    SELECT nombre, curso, archivo_pdf, fecha_diploma
-    FROM certificados
-    WHERE cedula=?
-    ORDER BY fecha_diploma DESC
+    SELECT 
+      e.nombre,
+      c.nombre AS curso,
+      cert.archivo_pdf,
+      cert.fecha_emision AS fecha_diploma
+    FROM certificados cert
+    JOIN estudiantes e ON e.id = cert.estudiante_id
+    JOIN cursos c ON c.id = cert.curso_id
+    WHERE e.cedula = ?
+    ORDER BY cert.fecha_emision DESC
   `,
   [req.params.cedula],
   (_, certs) => {

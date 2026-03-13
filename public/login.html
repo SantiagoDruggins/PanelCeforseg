@@ -178,6 +178,7 @@ async function login(){
 
   localStorage.setItem('token',data.token);
   localStorage.setItem('rol',data.rol);
+  localStorage.setItem('usuario',usuario);
 
   location.href='/dashboard';
 }

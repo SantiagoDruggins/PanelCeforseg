@@ -10,6 +10,7 @@
 <body>
 <script>
 if(!localStorage.getItem('token')) location.href='/login';
+if(localStorage.getItem('rol') !== 'gerente') location.href='/dashboard';
 </script>
 
 <div id="app"></div>
@@ -40,11 +41,12 @@ fetch('/layout.html')
               <th>Efectivo Reportado</th>
               <th>Nequi Reportado</th>
               <th>Diferencia</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tablaCierres">
             <tr>
-              <td colspan="8" class="text-center">Cargando...</td>
+              <td colspan="9" class="text-center">Cargando...</td>
             </tr>
           </tbody>
         </table>
@@ -66,7 +68,7 @@ async function cargarCierres(){
   if(!data.length){
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="text-center text-muted">
+        <td colspan="9" class="text-center text-muted">
           No hay cierres registrados
         </td>
       </tr>
@@ -95,9 +97,27 @@ async function cargarCierres(){
             $${Number(c.diferencia).toLocaleString()}
           </strong>
         </td>
+        <td>
+          <button class="btn btn-sm btn-outline-danger" onclick="eliminarCierre(${c.id})">
+            Eliminar
+          </button>
+        </td>
       </tr>
     `;
   });
+}
+
+async function eliminarCierre(id){
+  if(!confirm('¿Eliminar este cierre de caja?')) return;
+
+  const res = await fetch('/api/cierres-caja/'+id, {
+    method:'DELETE',
+    headers:{ Authorization:'Bearer '+token }
+  });
+
+  const data = await res.json();
+  alert(data.mensaje || 'Operación realizada');
+  if(res.ok) cargarCierres();
 }
 </script>
 

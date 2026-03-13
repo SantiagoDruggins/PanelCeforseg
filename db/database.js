@@ -82,8 +82,33 @@ db.run(`
     usuario_id INTEGER,
     nota TEXT,
     rol TEXT,
+    metodo_pago TEXT DEFAULT 'efectivo',
     FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
     FOREIGN KEY (curso_id) REFERENCES cursos(id)
+  )
+`);
+
+// Añadir metodo_pago si la tabla ya existía sin esa columna
+db.run(`ALTER TABLE abonos ADD COLUMN metodo_pago TEXT DEFAULT 'efectivo'`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('abonos.metodo_pago:', err.message);
+});
+
+/* =========================
+   CIERRES DE CAJA
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS cierres_caja (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT,
+    efectivo_sistema REAL DEFAULT 0,
+    nequi_sistema REAL DEFAULT 0,
+    total_sistema REAL DEFAULT 0,
+    efectivo_reportado REAL DEFAULT 0,
+    nequi_reportado REAL DEFAULT 0,
+    diferencia REAL DEFAULT 0,
+    usuario_id INTEGER,
+    creado_en TEXT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
   )
 `);
 
@@ -94,13 +119,55 @@ db.run(`
   CREATE TABLE IF NOT EXISTS certificados (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     estudiante_id INTEGER,
-    curso_id INTEGER,
+    cedula TEXT NOT NULL,
+    nombre TEXT NOT NULL,
+    curso TEXT NOT NULL,
+    fecha_diploma TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'nuevo',
     archivo_pdf TEXT,
+    fecha_subida TEXT NOT NULL,
+    curso_id INTEGER,
     fecha_emision TEXT,
-    estado TEXT DEFAULT 'valido',
     FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
     FOREIGN KEY (curso_id) REFERENCES cursos(id)
   )
 `);
+
+// Asegurar columnas nuevas en bases antiguas
+db.run(`ALTER TABLE certificados ADD COLUMN curso_id INTEGER`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.curso_id:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN fecha_emision TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.fecha_emision:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN cedula TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.cedula:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN nombre TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.nombre:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN curso TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.curso:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN fecha_diploma TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.fecha_diploma:', err.message);
+  }
+});
 
 module.exports = db;
