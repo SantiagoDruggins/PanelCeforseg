@@ -83,6 +83,9 @@ async function cargarCierres(){
       c.diferencia > 0 ? 'table-success' :
       c.diferencia < 0 ? 'table-danger' : '';
 
+    const efRep = Number(c.efectivo_reportado || 0);
+    const neRep = Number(c.nequi_reportado || 0);
+
     tbody.innerHTML += `
       <tr class="${color}">
         <td>${c.dia}</td>
@@ -90,21 +93,50 @@ async function cargarCierres(){
         <td>$${Number(c.efectivo_sistema).toLocaleString()}</td>
         <td>$${Number(c.nequi_sistema).toLocaleString()}</td>
         <td><strong>$${Number(c.total_sistema).toLocaleString()}</strong></td>
-        <td>$${Number(c.efectivo_reportado).toLocaleString()}</td>
-        <td>$${Number(c.nequi_reportado).toLocaleString()}</td>
+        <td>$${efRep.toLocaleString()}</td>
+        <td>$${neRep.toLocaleString()}</td>
         <td>
           <strong>
             $${Number(c.diferencia).toLocaleString()}
           </strong>
         </td>
         <td>
-          <button class="btn btn-sm btn-outline-danger" onclick="eliminarCierre(${c.id})">
-            Eliminar
-          </button>
+          <div class="d-flex gap-1 justify-content-center">
+            <button class="btn btn-sm btn-outline-secondary" onclick="editarCierre(${c.id}, ${efRep}, ${neRep})">
+              Editar
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="eliminarCierre(${c.id})">
+              Eliminar
+            </button>
+          </div>
         </td>
       </tr>
     `;
   });
+}
+
+async function editarCierre(id, efectivoActual, nequiActual){
+  const nuevoEf = prompt('Nuevo efectivo reportado:', efectivoActual);
+  if(nuevoEf === null) return;
+
+  const nuevoNe = prompt('Nuevo Nequi reportado:', nequiActual);
+  if(nuevoNe === null) return;
+
+  const res = await fetch('/api/cierres-caja/'+id, {
+    method:'PUT',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token
+    },
+    body: JSON.stringify({
+      efectivo_reportado: nuevoEf,
+      nequi_reportado: nuevoNe
+    })
+  });
+
+  const data = await res.json();
+  alert(data.mensaje || 'Cierre actualizado');
+  if(res.ok) cargarCierres();
 }
 
 async function eliminarCierre(id){

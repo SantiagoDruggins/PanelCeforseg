@@ -538,6 +538,45 @@ app.delete('/api/cierres-caja/:id',
     );
 });
 
+/* EDITAR CIERRE DE CAJA (SOLO GERENTE) */
+app.put('/api/cierres-caja/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+
+    const efectivo_reportado = Number(req.body.efectivo_reportado || 0);
+    const nequi_reportado = Number(req.body.nequi_reportado || 0);
+
+    db.get(
+      'SELECT total_sistema FROM cierres_caja WHERE id=?',
+      [req.params.id],
+      (_, row) => {
+        if(!row){
+          return res.status(404).json({ mensaje:'Cierre no encontrado' });
+        }
+
+        const diferencia = efectivo_reportado + nequi_reportado - Number(row.total_sistema || 0);
+
+        db.run(
+          `
+          UPDATE cierres_caja
+          SET efectivo_reportado=?,
+              nequi_reportado=?,
+              diferencia=?
+          WHERE id=?
+          `,
+          [efectivo_reportado, nequi_reportado, diferencia, req.params.id],
+          function(){
+            if(this.changes === 0){
+              return res.status(404).json({ mensaje:'Cierre no encontrado' });
+            }
+            res.json({ mensaje:'Cierre actualizado correctamente' });
+          }
+        );
+      }
+    );
+});
+
 
 app.get('/cierres-caja-panel', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/cierres-caja.html'))
