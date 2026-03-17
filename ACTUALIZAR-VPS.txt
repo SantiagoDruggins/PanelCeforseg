@@ -1,0 +1,21 @@
+============================================
+  ACTUALIZAR VPS (ejecutar en SSH: root@panelceforseg.site)
+============================================
+
+1) Normal (cuando git pull no da conflicto):
+
+cd /root/PanelCeforseg && git pull origin main && pm2 restart all
+
+
+2) Si falla por la base de datos (would be overwritten):
+
+cp db/panelceforseg.db /root/panelceforseg-backup.db
+rm db/panelceforseg.db
+git pull origin main
+cp /root/panelceforseg-backup.db db/panelceforseg.db
+pm2 restart all
+
+============================================
+  Yo te ayudo en local (cambios + git push).
+  Tú solo pegas lo de arriba en el VPS cuando quieras actualizar.
+============================================
