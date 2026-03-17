@@ -214,6 +214,50 @@ app.delete('/api/usuarios/:id',
     );
 });
 
+/* EDITAR USUARIO (SOLO GERENTE) */
+app.put('/api/usuarios/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  async (req, res) => {
+
+    const { usuario, rol, password } = req.body;
+    const id = req.params.id;
+
+    db.get('SELECT id FROM usuarios WHERE id=?', [id], async (err, row) => {
+      if (err || !row) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+
+      const updates = [];
+      const values = [];
+
+      if (usuario !== undefined && usuario !== '') {
+        updates.push('usuario = ?');
+        values.push(usuario);
+      }
+      if (rol !== undefined && rol !== '') {
+        updates.push('rol = ?');
+        values.push(rol);
+      }
+      if (password !== undefined && password !== '') {
+        updates.push('password = ?');
+        values.push(await bcrypt.hash(password, 10));
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ mensaje: 'No hay datos para actualizar' });
+      }
+
+      values.push(id);
+      db.run(
+        `UPDATE usuarios SET ${updates.join(', ')} WHERE id=?`,
+        values,
+        function () {
+          if (this.changes === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+          res.json({ mensaje: 'Usuario actualizado' });
+        }
+      );
+    });
+  });
+
 
 /* =====================================================
    FOTO ESTUDIANTE
@@ -272,18 +316,19 @@ app.post('/api/estudiantes',
   uploadFoto.single('foto'),
   (req, res) => {
 
-    const { nombre, cedula, telefono, ciudad, direccion } = req.body;
+    const { nombre, cedula, telefono, ciudad, direccion, email, contacto_emergencia, fecha_matricula } = req.body;
     let cursos = req.body.curso_ids || [];
     if (!Array.isArray(cursos)) cursos = [cursos];
 
     const foto = req.file ? `/uploads/fotos/${req.file.filename}` : null;
+    const fechaMat = fecha_matricula || new Date().toISOString().slice(0, 10);
 
     db.run(`
       INSERT INTO estudiantes
-      (nombre, cedula, telefono, ciudad, direccion, foto)
-      VALUES (?,?,?,?,?,?)
+      (nombre, cedula, telefono, ciudad, direccion, foto, email, contacto_emergencia, fecha_matricula)
+      VALUES (?,?,?,?,?,?,?,?,?)
     `,
-    [nombre, cedula, telefono, ciudad, direccion, foto],
+    [nombre, cedula, telefono, ciudad, direccion, foto, email || null, contacto_emergencia || null, fechaMat],
     function(err){
       if(err) return res.status(400).json({ mensaje:'Cédula ya registrada' });
 
@@ -355,14 +400,14 @@ app.put('/api/estudiantes/:id',
   permitirRoles('gerente','secretaria'),
   (req, res) => {
 
-    const { nombre, telefono, ciudad, direccion } = req.body;
+    const { nombre, telefono, ciudad, direccion, email, contacto_emergencia, fecha_matricula } = req.body;
 
     db.run(`
       UPDATE estudiantes
-      SET nombre=?, telefono=?, ciudad=?, direccion=?
+      SET nombre=?, telefono=?, ciudad=?, direccion=?, email=?, contacto_emergencia=?, fecha_matricula=?
       WHERE id=?
     `,
-    [nombre, telefono, ciudad, direccion, req.params.id],
+    [nombre, telefono, ciudad, direccion, email || null, contacto_emergencia || null, fecha_matricula || null, req.params.id],
     () => res.json({ mensaje:'Estudiante actualizado' }));
 });
 
@@ -402,13 +447,16 @@ app.get('/api/abonos/:id',
   (req, res) => {
     db.all(`
       SELECT 
+        a.id,
         a.fecha,
         a.valor,
         a.nota,
         a.rol,
         a.metodo_pago,
+        a.numero_factura,
         u.usuario,
-        c.nombre AS curso
+        c.nombre AS curso,
+        a.curso_id
       FROM abonos a
       LEFT JOIN usuarios u ON u.id = a.usuario_id
       LEFT JOIN cursos c ON c.id = a.curso_id
@@ -424,7 +472,10 @@ app.post('/api/abonos',
   permitirRoles('gerente','secretaria'),
   (req, res) => {
 
-    const { estudiante_id, curso_id, valor, nota, metodo_pago } = req.body;
+    const { estudiante_id, curso_id, valor, nota, metodo_pago, numero_factura } = req.body;
+
+    const numeroFactura = (numero_factura || '').toString().trim();
+    if (!numeroFactura) return res.status(400).json({ mensaje: 'El número de factura es obligatorio' });
 
     const metodo = metodo_pago || 'efectivo';
 
@@ -438,8 +489,8 @@ app.post('/api/abonos',
 
         db.run(`
           INSERT INTO abonos
-          (estudiante_id, curso_id, valor, fecha, usuario_id, nota, rol, metodo_pago)
-          VALUES (?,?,?,?,?,?,?,?)
+          (estudiante_id, curso_id, valor, fecha, usuario_id, nota, rol, metodo_pago, numero_factura)
+          VALUES (?,?,?,?,?,?,?,?,?)
         `,
         [
           estudiante_id,
@@ -447,9 +498,10 @@ app.post('/api/abonos',
           valor,
           new Date().toISOString(),
           req.usuario.id,
-          nota,
+          nota || null,
           req.usuario.rol,
-          metodo
+          metodo,
+          numeroFactura
         ]);
 
         db.run(
@@ -460,6 +512,55 @@ app.post('/api/abonos',
       }
     );
 });
+
+/* EDITAR ABONO (SOLO GERENTE/SECRETARIA) */
+app.put('/api/abonos/:id',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    const { valor, nota, metodo_pago, numero_factura } = req.body;
+    const idAbono = req.params.id;
+
+    db.get('SELECT estudiante_id, curso_id, valor AS valor_anterior FROM abonos WHERE id=?', [idAbono], (err, abono) => {
+      if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
+
+      const valorNuevo = valor !== undefined ? Number(valor) : abono.valor_anterior;
+      const diferencia = valorNuevo - Number(abono.valor_anterior);
+
+      db.run(`
+        UPDATE abonos SET valor=?, nota=?, metodo_pago=?, numero_factura=?
+        WHERE id=?
+      `, [valorNuevo, nota || null, metodo_pago || 'efectivo', (numero_factura || '').toString().trim() || null, idAbono], function () {
+        if (this.changes === 0) return res.status(404).json({ mensaje: 'Abono no encontrado' });
+
+        db.run(
+          'UPDATE estudiante_cursos SET saldo = saldo - ? WHERE estudiante_id=? AND curso_id=?',
+          [diferencia, abono.estudiante_id, abono.curso_id],
+          () => res.json({ mensaje: 'Abono actualizado' })
+        );
+      });
+    });
+  });
+
+/* ELIMINAR ABONO */
+app.delete('/api/abonos/:id',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    db.get('SELECT estudiante_id, curso_id, valor FROM abonos WHERE id=?', [req.params.id], (err, abono) => {
+      if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
+
+      db.run('DELETE FROM abonos WHERE id=?', [req.params.id], function () {
+        if (this.changes === 0) return res.status(404).json({ mensaje: 'Abono no encontrado' });
+
+        db.run(
+          'UPDATE estudiante_cursos SET saldo = saldo + ? WHERE estudiante_id=? AND curso_id=?',
+          [abono.valor, abono.estudiante_id, abono.curso_id],
+          () => res.json({ mensaje: 'Abono eliminado' })
+        );
+      });
+    });
+  });
 
 /* =====================================================
    CIERRE DE CAJA - DATOS DEL SISTEMA

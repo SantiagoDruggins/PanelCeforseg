@@ -51,15 +51,21 @@ async function cargarFicha(){
           ${editMode ? `
             <input id="nombre" class="form-control mb-2" value="${e.nombre}">
             <input id="telefono" class="form-control mb-2" placeholder="Teléfono" value="${e.telefono || ''}">
+            <input id="email" class="form-control mb-2" type="email" placeholder="Correo" value="${e.email || ''}">
             <input id="ciudad" class="form-control mb-2" placeholder="Ciudad" value="${e.ciudad || ''}">
             <input id="direccion" class="form-control mb-2" placeholder="Dirección" value="${e.direccion || ''}">
+            <input id="contacto_emergencia" class="form-control mb-2" placeholder="En caso de accidente llamar a" value="${e.contacto_emergencia || ''}">
+            <input id="fecha_matricula" class="form-control mb-2" type="date" value="${e.fecha_matricula || ''}">
             <button class="btn btn-warning" onclick="guardarCambios()">💾 Guardar cambios</button>
           ` : `
             <h4>${e.nombre}</h4>
             <p><b>Cédula:</b> ${e.cedula}</p>
             <p><b>Teléfono:</b> ${e.telefono || '-'}</p>
+            <p><b>Correo:</b> ${e.email || '-'}</p>
             <p><b>Ciudad:</b> ${e.ciudad || '-'}</p>
             <p><b>Dirección:</b> ${e.direccion || '-'}</p>
+            <p><b>En caso de accidente llamar a:</b> ${e.contacto_emergencia || '-'}</p>
+            <p><b>Fecha matrícula:</b> ${e.fecha_matricula || '-'}</p>
             <a href="/estudiante-ficha?id=${id}&edit=1" class="btn btn-warning">
               ✏️ Editar estudiante
             </a>
@@ -75,6 +81,8 @@ async function cargarFicha(){
       <div class="card-body">
         <h5>💰 Registrar abono</h5>
 
+        <input id="numero_factura" class="form-control mb-2" placeholder="Número de factura (obligatorio)" required>
+
         <select id="curso_id" class="form-select mb-2">
           <option value="">Seleccione curso</option>
         </select>
@@ -83,7 +91,28 @@ async function cargarFicha(){
 
         <select id="metodo_pago" class="form-select mb-2">
           <option value="efectivo">💵 Efectivo</option>
-          <option value="nequi">📱 Nequi / Bancolombia</option>
+          <option value="nequi">📱 Nequi</option>
+          <option value="Daviplata">Daviplata</option>
+          <option value="Bancolombia">Transferencia - Bancolombia</option>
+          <option value="Davivienda">Transferencia - Davivienda</option>
+          <option value="BBVA">Transferencia - BBVA Colombia</option>
+          <option value="Banco de Bogotá">Transferencia - Banco de Bogotá</option>
+          <option value="Banco Popular">Transferencia - Banco Popular</option>
+          <option value="AV Villas">Transferencia - AV Villas</option>
+          <option value="Caja Social">Transferencia - Banco Caja Social</option>
+          <option value="Pichincha">Transferencia - Banco Pichincha</option>
+          <option value="Bancoomeva">Transferencia - Bancoomeva</option>
+          <option value="Itaú">Transferencia - Banco Itaú</option>
+          <option value="Scotiabank Colpatria">Transferencia - Scotiabank Colpatria</option>
+          <option value="GNB Sudameris">Transferencia - GNB Sudameris</option>
+          <option value="Banco Agrario">Transferencia - Banco Agrario</option>
+          <option value="Banco Cooperativo Coopcentral">Transferencia - Coopcentral</option>
+          <option value="Banco Falabella">Transferencia - Banco Falabella</option>
+          <option value="Banco W">Transferencia - Banco W</option>
+          <option value="Banco Serfinanza">Transferencia - Serfinanza</option>
+          <option value="Banco Finandina">Transferencia - Finandina</option>
+          <option value="Banco Credifinanciera">Transferencia - Credifinanciera</option>
+          <option value="Otro banco">Transferencia - Otro banco</option>
         </select>
 
         <input id="nota" class="form-control mb-2" placeholder="Nota">
@@ -97,12 +126,14 @@ async function cargarFicha(){
         <table class="table table-striped mb-0">
           <thead class="table-dark">
             <tr>
+              <th>Factura</th>
               <th>Fecha</th>
               <th>Curso</th>
               <th>Valor</th>
               <th>Método</th>
               <th>Nota</th>
               <th>Usuario</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tablaAbonos"></tbody>
@@ -146,31 +177,46 @@ async function cargarAbonos(){
   tabla.innerHTML = '';
 
   abonos.forEach(a=>{
+    const factura = (a.numero_factura || '-').toString().replace(/</g,'&lt;');
+    const nota = (a.nota || '-').toString().replace(/</g,'&lt;');
+    const metodo = (a.metodo_pago || 'efectivo').toString().replace(/"/g,'&quot;');
+    const facturaAttr = (a.numero_factura || '').toString().replace(/"/g,'&quot;');
+    const notaAttr = (a.nota || '').toString().replace(/"/g,'&quot;');
     tabla.innerHTML += `
-      <tr>
+      <tr data-abono-id="${a.id}" data-valor="${a.valor}" data-nota="${notaAttr}" data-metodo="${metodo}" data-factura="${facturaAttr}">
+        <td>${factura}</td>
         <td>${new Date(a.fecha).toLocaleDateString()}</td>
-        <td>${a.curso}</td>
+        <td>${a.curso || '-'}</td>
         <td>$${Number(a.valor).toLocaleString()}</td>
         <td>${a.metodo_pago || 'efectivo'}</td>
-        <td>${a.nota || '-'}</td>
+        <td>${nota}</td>
         <td>${a.usuario || '-'}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-secondary me-1" onclick="editarAbonoDesdeFila(this)">Editar</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="eliminarAbono(${a.id})">Eliminar</button>
+        </td>
       </tr>
     `;
   });
 }
 
 async function registrarAbono(){
+  const numero_factura = document.getElementById('numero_factura').value.trim();
   const curso_id = document.getElementById('curso_id').value;
   const valor = document.getElementById('valor').value;
   const nota = document.getElementById('nota').value;
   const metodo_pago = document.getElementById('metodo_pago').value;
 
+  if(!numero_factura){
+    alert('El número de factura es obligatorio');
+    return;
+  }
   if(!curso_id || !valor){
     alert('Seleccione curso y valor');
     return;
   }
 
-  await fetch('/api/abonos',{
+  const res = await fetch('/api/abonos',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
@@ -181,11 +227,71 @@ async function registrarAbono(){
       curso_id,
       valor,
       nota,
-      metodo_pago
+      metodo_pago,
+      numero_factura
     })
   });
-
+  const data = await res.json();
+  if(!res.ok){ alert(data.mensaje || 'Error'); return; }
+  document.getElementById('numero_factura').value = '';
+  document.getElementById('valor').value = '';
+  document.getElementById('nota').value = '';
   cargarFicha();
+}
+
+function editarAbonoDesdeFila(btn){
+  const row = btn.closest('tr');
+  const idAbono = row.getAttribute('data-abono-id');
+  const valor = row.getAttribute('data-valor');
+  const nota = row.getAttribute('data-nota') || '';
+  const metodo = row.getAttribute('data-metodo') || 'efectivo';
+  const factura = row.getAttribute('data-factura') || '';
+
+  const v = prompt('Valor del abono:', valor);
+  if(v === null) return;
+  const n = prompt('Número de factura:', factura);
+  if(n === null) return;
+  const no = prompt('Nota:', nota);
+  if(no === null) return;
+  const met = prompt('Método de pago:', metodo);
+  if(met === null) return;
+
+  fetch('/api/abonos/' + idAbono, {
+    method:'PUT',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
+    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n })
+  }).then(r=>r.json()).then(data=>{
+    alert(data.mensaje || 'Actualizado');
+    cargarFicha();
+  });
+}
+
+async function eliminarAbono(idAbono){
+  if(!confirm('¿Eliminar este abono? Se restituirá el saldo al curso.')) return;
+  const res = await fetch('/api/abonos/' + idAbono, { method:'DELETE', headers:{ 'Authorization':'Bearer ' + token } });
+  const data = await res.json();
+  alert(data.mensaje || 'Eliminado');
+  if(res.ok) cargarFicha();
+}
+
+async function guardarCambios(){
+  const payload = {
+    nombre: document.getElementById('nombre').value,
+    telefono: document.getElementById('telefono').value,
+    email: document.getElementById('email').value || null,
+    ciudad: document.getElementById('ciudad').value,
+    direccion: document.getElementById('direccion').value,
+    contacto_emergencia: document.getElementById('contacto_emergencia').value || null,
+    fecha_matricula: document.getElementById('fecha_matricula').value || null
+  };
+  const res = await fetch('/api/estudiantes/' + id, {
+    method:'PUT',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  alert(data.mensaje);
+  if(res.ok) location.href = '/estudiante-ficha?id=' + id;
 }
 </script>
 

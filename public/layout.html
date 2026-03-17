@@ -118,7 +118,7 @@ body{
 
     <hr>
 
-    <a href="#" id="btnLogout">🚪 <span>Salir</span></a>
+    <a href="/login" id="btnLogout" onclick="localStorage.clear(); location.href='/login'; return false;">🚪 <span>Salir</span></a>
 
   </aside>
 
@@ -128,12 +128,6 @@ body{
 </div>
 
 <script>
-document.getElementById('btnLogout').addEventListener('click', e=>{
-  e.preventDefault();
-  localStorage.clear();
-  location.href='/login';
-});
-
 if(localStorage.getItem('rol') !== 'gerente'){
   const u = document.getElementById('menuUsuarios');
   if(u) u.style.display='none';

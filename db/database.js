@@ -50,7 +50,10 @@ db.run(`
     ciudad TEXT,
     direccion TEXT,
     estado TEXT DEFAULT 'activo',
-    foto TEXT
+    foto TEXT,
+    email TEXT,
+    contacto_emergencia TEXT,
+    fecha_matricula TEXT
   )
 `);
 
@@ -83,6 +86,7 @@ db.run(`
     nota TEXT,
     rol TEXT,
     metodo_pago TEXT DEFAULT 'efectivo',
+    numero_factura TEXT,
     FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
     FOREIGN KEY (curso_id) REFERENCES cursos(id)
   )
@@ -91,6 +95,19 @@ db.run(`
 // Añadir metodo_pago si la tabla ya existía sin esa columna
 db.run(`ALTER TABLE abonos ADD COLUMN metodo_pago TEXT DEFAULT 'efectivo'`, (err) => {
   if (err && !err.message.includes('duplicate column')) console.log('abonos.metodo_pago:', err.message);
+});
+db.run(`ALTER TABLE abonos ADD COLUMN numero_factura TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('abonos.numero_factura:', err.message);
+});
+// Estudiantes: nuevos campos matrícula
+db.run(`ALTER TABLE estudiantes ADD COLUMN email TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('estudiantes.email:', err.message);
+});
+db.run(`ALTER TABLE estudiantes ADD COLUMN contacto_emergencia TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('estudiantes.contacto_emergencia:', err.message);
+});
+db.run(`ALTER TABLE estudiantes ADD COLUMN fecha_matricula TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('estudiantes.fecha_matricula:', err.message);
 });
 
 /* =========================
