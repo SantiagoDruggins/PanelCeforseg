@@ -70,18 +70,18 @@
   const id = params.get('id');
   if (!id) { document.getElementById('msgCarga').textContent = 'Falta id del estudiante. Use: /ficha-imprimir?id=123'; return; }
 
-  /* Posiciones para ACTA DE MATRÍCULA CEFORSEG (ajuste top/left en % si su escaneo varía) */
+  /* Posiciones para ACTA DE MATRÍCULA CEFORSEG (alineadas al formulario escaneado) */
   const POS = {
-    fecha:     { top: '10%',  left: '78%' },   /* FECHA (día/mes/año) */
-    nombre:    { top: '13%',  left: '18%', maxWidth: '75%' },  /* NOMBRES Y APELLIDOS */
-    cedula:    { top: '16%',  left: '42%' },   /* CÉDULA N.º */
-    ciudad:    { top: '19%',  left: '18%' },  /* CIUDAD (origen/nacimiento) */
-    direccion: { top: '24%',  left: '18%', maxWidth: '70%' },  /* DIRECCIÓN DE RESIDENCIA */
-    telefono:  { top: '27%',  left: '18%' },  /* TEL / CEL */
-    email:     { top: '30%',  left: '18%', maxWidth: '60%' },  /* EMAIL */
-    contacto:  { top: '34%',  left: '18%', maxWidth: '70%' }, /* EN CASO DE ACCIDENTE INFORMAR A */
-    cursos:    { top: '42%',  left: '12%', maxWidth: '55%' },  /* cuadro FUNDAMENTACIÓN / cursos */
-    foto:      { top: '24%',  left: '78%' }   /* FOTOS 3X4 FONDO AZUL (derecha) */
+    fecha:     { top: '9.5%',  left: '76%' },   /* FECHA (3 cajitas arriba a la derecha) */
+    nombre:    { top: '12.5%', left: '22%', maxWidth: '72%' }, /* NOMBRES Y APELLIDOS */
+    cedula:    { top: '15.5%', left: '48%' },  /* CÉDULA N.º */
+    ciudad:    { top: '18.5%', left: '38%' },  /* CIUDAD */
+    direccion: { top: '23.5%', left: '22%', maxWidth: '68%' }, /* DIRECCIÓN DE RESIDENCIA */
+    telefono:  { top: '26.5%', left: '22%' }, /* TEL / CEL */
+    email:     { top: '29.5%', left: '22%', maxWidth: '58%' },  /* EMAIL */
+    contacto:  { top: '33.5%', left: '22%', maxWidth: '68%' },  /* EN CASO DE ACCIDENTE INFORMAR A */
+    cursos:    { top: '40%',   left: '14%', maxWidth: '52%' },  /* cuadro FUNDAMENTACIÓN / cursos */
+    foto:      { top: '39%',   left: '76%' }   /* FOTOS 3X4 FONDO AZUL (columna DOCUMENTACIÓN) */
   };
 
   const token = localStorage.getItem('token');
