@@ -42,8 +42,8 @@
     }
     .ficha-overlay .foto-estudiante {
       position: absolute;
-      width: 88px;
-      height: 112px;
+      width: 108px;
+      height: 138px;
       object-fit: cover;
       border: 1px solid #333;
     }
@@ -73,15 +73,15 @@
   /* Posiciones para ACTA DE MATRÍCULA CEFORSEG (alineadas al formulario escaneado) */
   const POS = {
     fecha:     { top: '9.5%',  left: '76%' },   /* FECHA (3 cajitas arriba a la derecha) */
-    nombre:    { top: '27.5%', left: '31.5%', maxWidth: '72%' }, /* NOMBRES Y APELLIDOS: +2cm derecha, +4.5cm abajo */
-    cedula:    { top: '15.5%', left: '48%' },  /* CÉDULA N.º */
-    ciudad:    { top: '18.5%', left: '38%' },  /* CIUDAD */
-    direccion: { top: '23.5%', left: '22%', maxWidth: '68%' }, /* DIRECCIÓN DE RESIDENCIA */
+    nombre:    { top: '21%',   left: '31.5%', maxWidth: '72%' }, /* NOMBRES Y APELLIDOS (-2cm arriba) */
+    cedula:    { top: '32.3%', left: '33.7%' }, /* CÉDULA N.º: +5cm abajo, -3cm izquierda */
+    ciudad:    { top: '35.3%', left: '52.3%' }, /* CIUDAD: +5cm abajo, +3cm derecha */
+    direccion: { top: '37%',   left: '31.5%', maxWidth: '68%' }, /* DIRECCIÓN: +4cm abajo, +2cm derecha */
     telefono:  { top: '40%',   left: '45.8%' }, /* TEL / CEL: +4cm abajo, +5cm derecha */
     email:     { top: '29.5%', left: '22%', maxWidth: '58%' },  /* EMAIL */
     contacto:  { top: '33.5%', left: '22%', maxWidth: '68%' },  /* EN CASO DE ACCIDENTE INFORMAR A */
     cursos:    { top: '57%',   left: '23.5%', maxWidth: '52%' }, /* cuadro cursos: +5cm abajo, +2cm derecha */
-    foto:      { top: '8%',    left: '76%' }    /* FOTOS 3X4 (2 cm a la izquierda) */
+    foto:      { top: '8%',    left: '83%' }    /* FOTOS 3X4 (+1.5 cm derecha) */
   };
 
   const token = localStorage.getItem('token');
