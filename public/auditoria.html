@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Auditoría</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+<script>
+if(!localStorage.getItem('token')) location.href='/login';
+if(localStorage.getItem('rol') !== 'gerente') location.href='/dashboard';
+</script>
+
+<div id="app"></div>
+
+<script>
+const token = localStorage.getItem('token');
+
+fetch('/layout.html')
+.then(r => r.text())
+.then(html => {
+  document.getElementById('app').innerHTML = html;
+
+  const content = document.querySelector('.content');
+
+  content.innerHTML = `
+    <h3 class="mb-4">🔒 Auditoría (blindaje)</h3>
+    <p class="text-muted mb-3">Quién hizo qué y cuándo. Solo gerente.</p>
+
+    <div class="card shadow">
+      <div class="card-body table-responsive">
+        <table class="table table-bordered table-hover align-middle table-sm">
+          <thead class="table-dark">
+            <tr>
+              <th>Fecha / Hora</th>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Acción</th>
+              <th>Tabla</th>
+              <th>ID</th>
+              <th>Detalles</th>
+            </tr>
+          </thead>
+          <tbody id="tablaAuditoria">
+            <tr>
+              <td colspan="7" class="text-center">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  cargarAuditoria();
+});
+
+async function cargarAuditoria(){
+  const res = await fetch('/api/auditoria?limit=300', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+
+  const data = await res.json();
+  const tbody = document.getElementById('tablaAuditoria');
+
+  if(!res.ok || !data.length){
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-muted">
+          ${!res.ok ? 'No autorizado o error.' : 'No hay registros de auditoría.'}
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = data.map(a => {
+    const detalles = (a.detalles || '').toString();
+    const detallesCorto = detalles.length > 80 ? detalles.substring(0, 80) + '…' : detalles;
+    return `
+      <tr>
+        <td>${(a.creado_en || '').replace('T',' ')}</td>
+        <td>${escapeHtml(a.usuario_nombre || '-')}</td>
+        <td>${escapeHtml(a.rol || '-')}</td>
+        <td>${escapeHtml(a.accion || '-')}</td>
+        <td>${escapeHtml(a.tabla_afectada || '-')}</td>
+        <td>${a.registro_id != null ? a.registro_id : '-'}</td>
+        <td class="small text-break" title="${escapeHtml(detalles)}">${escapeHtml(detallesCorto) || '-'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function escapeHtml(s){
+  if(!s) return '';
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

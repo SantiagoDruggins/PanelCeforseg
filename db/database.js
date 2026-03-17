@@ -187,4 +187,22 @@ db.run(`ALTER TABLE certificados ADD COLUMN fecha_diploma TEXT`, (err) => {
   }
 });
 
+/* =========================
+   AUDITORÍA (blindaje anti-fraude)
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS auditoria (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER,
+    usuario_nombre TEXT,
+    rol TEXT,
+    accion TEXT NOT NULL,
+    tabla_afectada TEXT,
+    registro_id INTEGER,
+    detalles TEXT,
+    creado_en TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+  )
+`);
+
 module.exports = db;

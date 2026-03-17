@@ -112,6 +112,7 @@ body{
     <a href="/cursos-panel">📚 <span>Cursos</span></a>
     <a href="/certificados-panel">📄 <span>Certificados</span></a>
     <a href="/usuarios-panel" id="menuUsuarios">👤 <span>Usuarios</span></a>
+    <a href="/auditoria-panel" id="menuAuditoria">🔒 <span>Auditoría</span></a>
     <a href="/cierre-caja">💰 <span>Cierre de Caja</span></a>
     <a href="/cierres-caja-panel">📋 <span>Historial Cierres</span></a>
 
@@ -131,6 +132,8 @@ body{
 if(localStorage.getItem('rol') !== 'gerente'){
   const u = document.getElementById('menuUsuarios');
   if(u) u.style.display='none';
+  const aud = document.getElementById('menuAuditoria');
+  if(aud) aud.style.display='none';
 }
 </script>
 

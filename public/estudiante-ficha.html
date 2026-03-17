@@ -196,9 +196,11 @@ async function cargarAbonos(){
         <td>${a.metodo_pago || 'efectivo'}</td>
         <td>${nota}</td>
         <td>${a.usuario || '-'}</td>
-        <td>
+        <td class="btns-abono">
+          ${localStorage.getItem('rol') === 'gerente' ? `
           <button class="btn btn-sm btn-outline-secondary me-1" onclick="editarAbonoDesdeFila(this)">Editar</button>
           <button class="btn btn-sm btn-outline-danger" onclick="eliminarAbono(${a.id})">Eliminar</button>
+          ` : '<span class="text-muted small">Solo gerente puede editar/eliminar</span>'}
         </td>
       </tr>
     `;

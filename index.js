@@ -14,6 +14,18 @@ const { verificarToken, permitirRoles } = require('./middleware/authMiddleware')
 
 const PORT = 3000;
 
+/* Helper: registrar acción en auditoría (blindaje) */
+function registrarAuditoria(req, accion, tabla_afectada, registro_id, detalles) {
+  const u = req.usuario || {};
+  const det = typeof detalles === 'string' ? detalles : (detalles ? JSON.stringify(detalles) : null);
+  db.run(
+    `INSERT INTO auditoria (usuario_id, usuario_nombre, rol, accion, tabla_afectada, registro_id, detalles)
+     VALUES (?,?,?,?,?,?,?)`,
+    [u.id || null, u.usuario || null, u.rol || null, accion, tabla_afectada || null, registro_id || null, det],
+    () => {}
+  );
+}
+
 /* =====================================================
    RUTAS HTML
 ===================================================== */
@@ -179,6 +191,7 @@ app.post('/api/usuarios',
         if(err){
           return res.status(400).json({ mensaje:'Usuario ya existe' });
         }
+        registrarAuditoria(req, 'crear_usuario', 'usuarios', null, { usuario, rol });
         res.json({ mensaje:'Usuario creado correctamente' });
       }
     );
@@ -210,6 +223,7 @@ app.delete('/api/usuarios/:id',
             if(this.changes === 0){
               return res.status(404).json({ mensaje:'Usuario no encontrado' });
             }
+            registrarAuditoria(req, 'eliminar_usuario', 'usuarios', req.params.id, { usuario_eliminado_id: req.params.id });
             res.json({ mensaje:'Usuario eliminado' });
           }
         );
@@ -255,6 +269,7 @@ app.put('/api/usuarios/:id',
         values,
         function () {
           if (this.changes === 0) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+          registrarAuditoria(req, 'editar_usuario', 'usuarios', id, { usuario, rol });
           res.json({ mensaje: 'Usuario actualizado' });
         }
       );
@@ -510,16 +525,19 @@ app.post('/api/abonos',
         db.run(
           'UPDATE estudiante_cursos SET saldo=? WHERE estudiante_id=? AND curso_id=?',
           [nuevoSaldo, estudiante_id, curso_id],
-          () => res.json({ mensaje:'Abono registrado' })
+          () => {
+            registrarAuditoria(req, 'crear_abono', 'abonos', null, { estudiante_id, curso_id, valor, metodo, numero_factura: numeroFactura });
+            res.json({ mensaje:'Abono registrado' });
+          }
         );
       }
     );
 });
 
-/* EDITAR ABONO (SOLO GERENTE/SECRETARIA) - FACTURA OBLIGATORIA */
+/* EDITAR ABONO (SOLO GERENTE) - blindaje: secretaria no puede modificar montos */
 app.put('/api/abonos/:id',
   verificarToken,
-  permitirRoles('gerente','secretaria'),
+  permitirRoles('gerente'),
   (req, res) => {
     const { valor, nota, metodo_pago, numero_factura } = req.body;
     const idAbono = req.params.id;
@@ -542,16 +560,19 @@ app.put('/api/abonos/:id',
         db.run(
           'UPDATE estudiante_cursos SET saldo = saldo - ? WHERE estudiante_id=? AND curso_id=?',
           [diferencia, abono.estudiante_id, abono.curso_id],
-          () => res.json({ mensaje: 'Abono actualizado' })
+          () => {
+            registrarAuditoria(req, 'editar_abono', 'abonos', idAbono, { valor_anterior: abono.valor_anterior, valor_nuevo: valorNuevo });
+            res.json({ mensaje: 'Abono actualizado' });
+          }
         );
       });
     });
   });
 
-/* ELIMINAR ABONO */
+/* ELIMINAR ABONO (SOLO GERENTE) - blindaje: secretaria no puede borrar abonos */
 app.delete('/api/abonos/:id',
   verificarToken,
-  permitirRoles('gerente','secretaria'),
+  permitirRoles('gerente'),
   (req, res) => {
     db.get('SELECT estudiante_id, curso_id, valor FROM abonos WHERE id=?', [req.params.id], (err, abono) => {
       if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
@@ -562,7 +583,10 @@ app.delete('/api/abonos/:id',
         db.run(
           'UPDATE estudiante_cursos SET saldo = saldo + ? WHERE estudiante_id=? AND curso_id=?',
           [abono.valor, abono.estudiante_id, abono.curso_id],
-          () => res.json({ mensaje: 'Abono eliminado' })
+          () => {
+            registrarAuditoria(req, 'eliminar_abono', 'abonos', req.params.id, { valor: abono.valor, estudiante_id: abono.estudiante_id, curso_id: abono.curso_id });
+            res.json({ mensaje: 'Abono eliminado' });
+          }
         );
       });
     });
@@ -600,6 +624,22 @@ app.get('/api/cierre-caja/hoy',
       });
     });
 });
+
+/* =====================================================
+   AUDITORÍA (SOLO GERENTE - blindaje)
+===================================================== */
+app.get('/api/auditoria',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+    db.all(
+      `SELECT id, usuario_nombre, rol, accion, tabla_afectada, registro_id, detalles, creado_en
+       FROM auditoria ORDER BY id DESC LIMIT ?`,
+      [limit],
+      (_, rows) => res.json(rows || [])
+    );
+  });
 
 /* =====================================================
    HISTORIAL DE CIERRES (GERENTE)
@@ -640,6 +680,7 @@ app.delete('/api/cierres-caja/:id',
         if(this.changes === 0){
           return res.status(404).json({ mensaje:'Cierre no encontrado' });
         }
+        registrarAuditoria(req, 'eliminar_cierre_caja', 'cierres_caja', req.params.id, {});
         res.json({ mensaje:'Cierre eliminado' });
       }
     );
@@ -677,6 +718,7 @@ app.put('/api/cierres-caja/:id',
             if(this.changes === 0){
               return res.status(404).json({ mensaje:'Cierre no encontrado' });
             }
+            registrarAuditoria(req, 'editar_cierre_caja', 'cierres_caja', req.params.id, { efectivo_reportado, nequi_reportado, diferencia });
             res.json({ mensaje:'Cierre actualizado correctamente' });
           }
         );
@@ -687,6 +729,10 @@ app.put('/api/cierres-caja/:id',
 
 app.get('/cierres-caja-panel', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/cierres-caja.html'))
+);
+
+app.get('/auditoria-panel', (_, res) =>
+  res.sendFile(path.join(__dirname, 'public/auditoria.html'))
 );
 
 
@@ -761,7 +807,8 @@ app.post('/api/cierre-caja',
           diferencia,
           req.usuario.id,
           new Date().toISOString()
-        ], () => {
+        ], function() {
+          registrarAuditoria(req, 'crear_cierre_caja', 'cierres_caja', this.lastID, { total_sistema: totalSistema, efectivo_reportado, nequi_reportado, diferencia });
           res.json({ mensaje:'Cierre de caja registrado correctamente' });
         });
       });
