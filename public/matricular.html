@@ -198,6 +198,9 @@ function registrarSubmit(){
 
     const data = await res.json();
     alert(data.mensaje);
+    if (data.id) {
+      window.open('/ficha-imprimir?id=' + data.id, '_blank', 'width=900,height=800');
+    }
     location.href='/estudiantes-panel';
   });
 }

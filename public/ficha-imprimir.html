@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>ACTA DE MATRÍCULA - CEFORSEG</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #ddd; padding: 16px; }
+    .no-print { margin-bottom: 16px; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .no-print { display: none !important; }
+      .ficha-container { box-shadow: none !important; margin: 0 !important; }
+    }
+    .ficha-container {
+      position: relative;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      background-size: 100% auto;
+      background-repeat: no-repeat;
+      background-position: top center;
+      background-color: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,.2);
+    }
+    .ficha-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      min-height: 297mm;
+      padding: 0;
+      pointer-events: none;
+    }
+    .ficha-overlay .campo {
+      position: absolute;
+      font-size: 10px;
+      line-height: 1.2;
+      color: #000;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ficha-overlay .foto-estudiante {
+      position: absolute;
+      width: 70px;
+      height: 90px;
+      object-fit: cover;
+      border: 1px solid #333;
+    }
+    .ficha-overlay .cursos-list { font-size: 9px; line-height: 1.25; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print">
+    <a href="#" id="btnVolver">← Volver</a>
+    <button type="button" onclick="window.print()" style="margin-left:12px; padding:10px 20px; cursor:pointer; background:#0a3b78; color:#fff; border:none; border-radius:6px;">
+      🖨️ Imprimir acta de matrícula
+    </button>
+    <p id="msgCarga" class="text-muted"></p>
+    <p class="small text-muted mt-2">Ficha en blanco: <strong>public/assets/ficha-matricula-blanca.png</strong> (o .jpg). Ajuste el objeto POS en este archivo si algún campo no coincide.</p>
+  </div>
+
+  <div id="fichaContainer" class="ficha-container"></div>
+
+<script>
+(function() {
+  if (!localStorage.getItem('token')) { location.href = '/login'; return; }
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if (!id) { document.getElementById('msgCarga').textContent = 'Falta id del estudiante. Use: /ficha-imprimir?id=123'; return; }
+
+  /* Posiciones para ACTA DE MATRÍCULA CEFORSEG (ajuste top/left en % si su escaneo varía) */
+  const POS = {
+    fecha:     { top: '10%',  left: '78%' },   /* FECHA (día/mes/año) */
+    nombre:    { top: '13%',  left: '18%', maxWidth: '75%' },  /* NOMBRES Y APELLIDOS */
+    cedula:    { top: '16%',  left: '42%' },   /* CÉDULA N.º */
+    ciudad:    { top: '19%',  left: '18%' },  /* CIUDAD (origen/nacimiento) */
+    direccion: { top: '24%',  left: '18%', maxWidth: '70%' },  /* DIRECCIÓN DE RESIDENCIA */
+    telefono:  { top: '27%',  left: '18%' },  /* TEL / CEL */
+    email:     { top: '30%',  left: '18%', maxWidth: '60%' },  /* EMAIL */
+    contacto:  { top: '34%',  left: '18%', maxWidth: '70%' }, /* EN CASO DE ACCIDENTE INFORMAR A */
+    cursos:    { top: '42%',  left: '12%', maxWidth: '55%' },  /* cuadro FUNDAMENTACIÓN / cursos */
+    foto:      { top: '24%',  left: '78%' }   /* FOTOS 3X4 FONDO AZUL (derecha) */
+  };
+
+  const token = localStorage.getItem('token');
+  const container = document.getElementById('fichaContainer');
+  const msg = document.getElementById('msgCarga');
+
+  fetch('/api/estudiantes/' + id, { headers: { Authorization: 'Bearer ' + token } })
+    .then(r => r.json())
+    .then(e => {
+      if (!e.id) { msg.textContent = 'Estudiante no encontrado'; return; }
+
+      var bg = "url('/assets/ficha-matricula-blanca.png')";
+      container.style.backgroundImage = bg;
+
+      const cursosTexto = (e.cursos && e.cursos.length)
+        ? e.cursos.map(c => c.nombre).join('  •  ')
+        : '—';
+
+      const fmtFecha = (f) => {
+        if (!f) return '—';
+        const d = new Date(f + 'T12:00:00');
+        if (isNaN(d.getTime())) return f;
+        return d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear();
+      };
+
+      const overlay = document.createElement('div');
+      overlay.className = 'ficha-overlay';
+
+      const campos = [
+        { value: fmtFecha(e.fecha_matricula), pos: POS.fecha },
+        { value: e.nombre || '—', pos: POS.nombre },
+        { value: e.cedula || '—', pos: POS.cedula },
+        { value: e.ciudad || '—', pos: POS.ciudad },
+        { value: e.direccion || '—', pos: POS.direccion },
+        { value: e.telefono || '—', pos: POS.telefono },
+        { value: e.email || '—', pos: POS.email },
+        { value: e.contacto_emergencia || '—', pos: POS.contacto }
+      ];
+
+      campos.forEach(({ value, pos }) => {
+        const el = document.createElement('div');
+        el.className = 'campo';
+        el.style.top = pos.top;
+        el.style.left = pos.left;
+        if (pos.maxWidth) el.style.maxWidth = pos.maxWidth;
+        el.textContent = value;
+        overlay.appendChild(el);
+      });
+
+      const cursosEl = document.createElement('div');
+      cursosEl.className = 'campo cursos-list';
+      cursosEl.style.top = POS.cursos.top;
+      cursosEl.style.left = POS.cursos.left;
+      if (POS.cursos.maxWidth) cursosEl.style.maxWidth = POS.cursos.maxWidth;
+      cursosEl.textContent = cursosTexto;
+      overlay.appendChild(cursosEl);
+
+      if (e.foto) {
+        const img = document.createElement('img');
+        img.className = 'foto-estudiante';
+        img.src = e.foto;
+        img.alt = 'Foto';
+        img.style.top = POS.foto.top;
+        img.style.left = POS.foto.left;
+        overlay.appendChild(img);
+      }
+
+      container.appendChild(overlay);
+      msg.textContent = 'Listo. Use "Imprimir acta de matrícula" o Ctrl+P.';
+    })
+    .catch(() => { msg.textContent = 'Error al cargar datos'; });
+
+  document.getElementById('btnVolver').href = '/estudiante-ficha?id=' + id;
+})();
+</script>
+
+</body>
+</html>

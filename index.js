@@ -30,6 +30,9 @@ app.get('/validar', (_, res) => res.sendFile(path.join(__dirname, 'public/valida
 app.get('/cierre-caja', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/cierre-caja.html'))
 );
+app.get('/ficha-imprimir', (_, res) =>
+  res.sendFile(path.join(__dirname, 'public/ficha-imprimir.html'))
+);
 
 
 /* =====================================================
@@ -350,7 +353,7 @@ app.post('/api/estudiantes',
         );
       });
 
-      res.json({ mensaje:'Estudiante creado' });
+      res.json({ mensaje:'Estudiante creado', id: estudianteId });
     });
 });
 
