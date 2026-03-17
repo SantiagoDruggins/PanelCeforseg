@@ -80,8 +80,10 @@ async function cargarFicha(){
     <div class="card mb-4 shadow-sm">
       <div class="card-body">
         <h5>💰 Registrar abono</h5>
+        <p class="text-muted small mb-2">Todo movimiento de dinero debe tener número de factura.</p>
 
-        <input id="numero_factura" class="form-control mb-2" placeholder="Número de factura (obligatorio)" required>
+        <label class="form-label fw-bold">Número de factura <span class="text-danger">*</span></label>
+        <input id="numero_factura" class="form-control mb-2" placeholder="Ej: FAC 5693" required>
 
         <select id="curso_id" class="form-select mb-2">
           <option value="">Seleccione curso</option>
@@ -126,7 +128,7 @@ async function cargarFicha(){
         <table class="table table-striped mb-0">
           <thead class="table-dark">
             <tr>
-              <th>Factura</th>
+              <th>Factura <span class="text-warning" title="Obligatorio">*</span></th>
               <th>Fecha</th>
               <th>Curso</th>
               <th>Valor</th>
@@ -249,8 +251,9 @@ function editarAbonoDesdeFila(btn){
 
   const v = prompt('Valor del abono:', valor);
   if(v === null) return;
-  const n = prompt('Número de factura:', factura);
+  const n = prompt('Número de factura (obligatorio):', factura);
   if(n === null) return;
+  if(!n.trim()){ alert('El número de factura es obligatorio.'); return; }
   const no = prompt('Nota:', nota);
   if(no === null) return;
   const met = prompt('Método de pago:', metodo);

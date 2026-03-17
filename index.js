@@ -513,13 +513,16 @@ app.post('/api/abonos',
     );
 });
 
-/* EDITAR ABONO (SOLO GERENTE/SECRETARIA) */
+/* EDITAR ABONO (SOLO GERENTE/SECRETARIA) - FACTURA OBLIGATORIA */
 app.put('/api/abonos/:id',
   verificarToken,
   permitirRoles('gerente','secretaria'),
   (req, res) => {
     const { valor, nota, metodo_pago, numero_factura } = req.body;
     const idAbono = req.params.id;
+
+    const numeroFactura = (numero_factura || '').toString().trim();
+    if (!numeroFactura) return res.status(400).json({ mensaje: 'El número de factura es obligatorio al editar.' });
 
     db.get('SELECT estudiante_id, curso_id, valor AS valor_anterior FROM abonos WHERE id=?', [idAbono], (err, abono) => {
       if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
@@ -530,7 +533,7 @@ app.put('/api/abonos/:id',
       db.run(`
         UPDATE abonos SET valor=?, nota=?, metodo_pago=?, numero_factura=?
         WHERE id=?
-      `, [valorNuevo, nota || null, metodo_pago || 'efectivo', (numero_factura || '').toString().trim() || null, idAbono], function () {
+      `, [valorNuevo, nota || null, metodo_pago || 'efectivo', numeroFactura, idAbono], function () {
         if (this.changes === 0) return res.status(404).json({ mensaje: 'Abono no encontrado' });
 
         db.run(
