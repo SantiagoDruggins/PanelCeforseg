@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Deudores / Morosos - CEFORSEG</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+<script>
+if(!localStorage.getItem('token')) location.href='/login';
+</script>
+
+<div id="app"></div>
+
+<script>
+const token = localStorage.getItem('token');
+function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
+
+let ultimaLista = [];
+
+fetch('/layout.html')
+.then(r=>r.text())
+.then(html=>{
+  document.getElementById('app').innerHTML = html;
+  const content = document.querySelector('.content');
+
+  content.innerHTML = `
+    <h3 class="mb-3">📋 Deudores y morosos</h3>
+    <p class="text-muted mb-4">Lista para cobros masivos. Opcional: filtrar por &quot;moroso a partir de&quot; (último abono antes de esa fecha).</p>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label">Moroso a partir de (último abono antes de)</label>
+            <input type="date" id="morosoDesde" class="form-control">
+            <small class="text-muted">Dejar vacío = todos los deudores. Con fecha = solo quienes no han pagado desde antes de esa fecha.</small>
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100" onclick="buscar()">Buscar</button>
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-outline-success w-100" onclick="exportarCSV()" id="btnExportar" disabled>Exportar CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Nombre</th>
+                <th>Cédula</th>
+                <th>Teléfono</th>
+                <th>Email</th>
+                <th>Último abono</th>
+                <th>Deuda</th>
+                <th>Cursos con saldo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tabla">
+              <tr><td colspan="8" class="text-center text-muted">Indica opcionalmente la fecha y pulsa Buscar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+});
+
+async function buscar(){
+  const morosoDesde = document.getElementById('morosoDesde').value.trim();
+  const params = new URLSearchParams();
+  if (morosoDesde) params.set('moroso_desde', morosoDesde);
+
+  const res = await fetch('/api/estudiantes/deudores?' + params, { headers: { Authorization: 'Bearer ' + token } });
+  const data = await res.json();
+  ultimaLista = data || [];
+
+  const tbody = document.getElementById('tabla');
+  const btnExportar = document.getElementById('btnExportar');
+
+  if (ultimaLista.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay deudores' + (morosoDesde ? ' morosos desde antes de ' + morosoDesde : '') + '.</td></tr>';
+    btnExportar.disabled = true;
+    return;
+  }
+
+  btnExportar.disabled = false;
+  tbody.innerHTML = ultimaLista.map(d => {
+    const ultimo = d.ultimo_abono ? (d.ultimo_abono + '').slice(0, 10) : 'Nunca';
+    return `
+      <tr>
+        <td>${escapeHtml(d.nombre || '—')}</td>
+        <td>${escapeHtml(d.cedula || '—')}</td>
+        <td>${escapeHtml(d.telefono || '—')}</td>
+        <td>${escapeHtml(d.email || '—')}</td>
+        <td>${ultimo}</td>
+        <td>${formatCOP(d.total_deuda)}</td>
+        <td class="small">${escapeHtml((d.detalle_cursos || '—').toString().slice(0, 60))}${(d.detalle_cursos || '').length > 60 ? '…' : ''}</td>
+        <td><a href="/estudiante-ficha?id=${d.id}" class="btn btn-sm btn-outline-primary">Ficha</a></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function escapeHtml(s){
+  if (!s) return '';
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function exportarCSV(){
+  if (ultimaLista.length === 0) return;
+  const B = '\uFEFF';
+  const sep = ';';
+  const enc = (v) => '"' + String(v || '').replace(/"/g, '""') + '"';
+  const filas = [
+    ['Nombre','Cédula','Teléfono','Email','Último abono','Deuda (COP)','Cursos con saldo'].join(sep),
+    ...ultimaLista.map(d => [
+      enc(d.nombre),
+      enc(d.cedula),
+      enc(d.telefono),
+      enc(d.email),
+      enc(d.ultimo_abono ? (d.ultimo_abono+'').slice(0,10) : 'Nunca'),
+      enc(d.total_deuda),
+      enc(d.detalle_cursos)
+    ].join(sep))
+  ];
+  const csv = B + filas.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'deudores-morosos-' + (document.getElementById('morosoDesde').value || 'todos') + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>

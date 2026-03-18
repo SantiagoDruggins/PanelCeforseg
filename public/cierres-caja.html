@@ -90,14 +90,14 @@ async function cargarCierres(){
       <tr class="${color}">
         <td>${c.dia}</td>
         <td>${c.usuario}</td>
-        <td>$${Number(c.efectivo_sistema).toLocaleString()}</td>
-        <td>$${Number(c.nequi_sistema).toLocaleString()}</td>
-        <td><strong>$${Number(c.total_sistema).toLocaleString()}</strong></td>
-        <td>$${efRep.toLocaleString()}</td>
-        <td>$${neRep.toLocaleString()}</td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(c.efectivo_sistema) : '$' + Number(c.efectivo_sistema).toLocaleString('es-CO') + ' COP'}</td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(c.nequi_sistema) : '$' + Number(c.nequi_sistema).toLocaleString('es-CO') + ' COP'}</td>
+        <td><strong>${typeof formatCOP === 'function' ? formatCOP(c.total_sistema) : '$' + Number(c.total_sistema).toLocaleString('es-CO') + ' COP'}</strong></td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(efRep) : '$' + efRep.toLocaleString('es-CO') + ' COP'}</td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(neRep) : '$' + neRep.toLocaleString('es-CO') + ' COP'}</td>
         <td>
           <strong>
-            $${Number(c.diferencia).toLocaleString()}
+            ${typeof formatCOP === 'function' ? formatCOP(c.diferencia) : '$' + Number(c.diferencia).toLocaleString('es-CO') + ' COP'}
           </strong>
         </td>
         <td>

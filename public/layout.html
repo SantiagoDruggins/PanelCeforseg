@@ -108,11 +108,13 @@ body{
 
     <a href="/dashboard">📊 <span>Resumen</span></a>
     <a href="/estudiantes-panel">👥 <span>Estudiantes</span></a>
+    <a href="/deudores-panel">📋 <span>Deudores / Morosos</span></a>
     <a href="/matricular">➕ <span>Matricular</span></a>
     <a href="/cursos-panel">📚 <span>Cursos</span></a>
     <a href="/certificados-panel">📄 <span>Certificados</span></a>
     <a href="/usuarios-panel" id="menuUsuarios">👤 <span>Usuarios</span></a>
     <a href="/auditoria-panel" id="menuAuditoria">🔒 <span>Auditoría</span></a>
+    <a href="/nomina-panel" id="menuNomina">📋 <span>Nómina</span></a>
     <a href="/cierre-caja">💰 <span>Cierre de Caja</span></a>
     <a href="/cierres-caja-panel">📋 <span>Historial Cierres</span></a>
 
@@ -129,11 +131,14 @@ body{
 </div>
 
 <script>
+function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
 if(localStorage.getItem('rol') !== 'gerente'){
   const u = document.getElementById('menuUsuarios');
   if(u) u.style.display='none';
   const aud = document.getElementById('menuAuditoria');
   if(aud) aud.style.display='none';
+  const nom = document.getElementById('menuNomina');
+  if(nom) nom.style.display='none';
 }
 </script>
 

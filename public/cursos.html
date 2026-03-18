@@ -85,7 +85,7 @@ async function cargarCursos(){
               : 'Sin descripción'}
           </small>
         </td>
-        <td>$${Number(c.precio).toLocaleString()}</td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(c.precio) : '$' + Number(c.precio).toLocaleString('es-CO') + ' COP'}</td>
         <td>
           <button class="btn btn-danger btn-sm" onclick="eliminarCurso(${c.id})">
             Eliminar

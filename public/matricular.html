@@ -171,7 +171,7 @@ async function cargarCursos(){
       <div class="form-check">
         <input class="form-check-input" type="checkbox" name="curso_ids[]" value="${c.id}" id="curso_${c.id}">
         <label class="form-check-label" for="curso_${c.id}">
-          ${c.nombre} - $${Number(c.precio).toLocaleString()}
+          ${c.nombre} - ${typeof formatCOP === 'function' ? formatCOP(c.precio) : '$' + Number(c.precio).toLocaleString('es-CO') + ' COP'}
         </label>
       </div>
     `;

@@ -109,6 +109,34 @@ db.run(`ALTER TABLE estudiantes ADD COLUMN contacto_emergencia TEXT`, (err) => {
 db.run(`ALTER TABLE estudiantes ADD COLUMN fecha_matricula TEXT`, (err) => {
   if (err && !err.message.includes('duplicate column')) console.log('estudiantes.fecha_matricula:', err.message);
 });
+db.run(`ALTER TABLE estudiantes ADD COLUMN usuario_matricula_id INTEGER REFERENCES usuarios(id)`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('estudiantes.usuario_matricula_id:', err.message);
+});
+
+/* =========================
+   COMISIONES / NÓMINA
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS comisiones_curso (
+    curso_id INTEGER PRIMARY KEY,
+    valor_comision INTEGER DEFAULT 0,
+    FOREIGN KEY (curso_id) REFERENCES cursos(id)
+  )
+`);
+db.run(`
+  CREATE TABLE IF NOT EXISTS config (
+    clave TEXT PRIMARY KEY,
+    valor TEXT
+  )
+`);
+db.run(`
+  CREATE TABLE IF NOT EXISTS nomina_basico (
+    usuario_id INTEGER PRIMARY KEY,
+    valor_basico INTEGER DEFAULT 0,
+    tipo_basico TEXT DEFAULT 'mensual',
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+  )
+`);
 
 /* =========================
    CIERRES DE CAJA

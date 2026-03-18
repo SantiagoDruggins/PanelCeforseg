@@ -163,8 +163,8 @@ function renderCursos(cursos){
       <div class="card mb-3 shadow-sm">
         <div class="card-body">
           <h6>${c.nombre}</h6>
-          <p><b>Precio:</b> $${Number(c.precio).toLocaleString()}</p>
-          <p><b>Saldo:</b> $${Number(c.saldo).toLocaleString()}</p>
+          <p><b>Precio:</b> ${typeof formatCOP === 'function' ? formatCOP(c.precio) : '$' + Number(c.precio).toLocaleString('es-CO') + ' COP'}</p>
+          <p><b>Saldo:</b> ${typeof formatCOP === 'function' ? formatCOP(c.saldo) : '$' + Number(c.saldo).toLocaleString('es-CO') + ' COP'}</p>
         </div>
       </div>
     `;
@@ -192,7 +192,7 @@ async function cargarAbonos(){
         <td>${factura}</td>
         <td>${new Date(a.fecha).toLocaleDateString()}</td>
         <td>${a.curso || '-'}</td>
-        <td>$${Number(a.valor).toLocaleString()}</td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(a.valor) : '$' + Number(a.valor).toLocaleString('es-CO') + ' COP'}</td>
         <td>${a.metodo_pago || 'efectivo'}</td>
         <td>${nota}</td>
         <td>${a.usuario || '-'}</td>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Nómina / Comisiones - CEFORSEG</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body>
+<script>
+if(!localStorage.getItem('token')) location.href='/login';
+if(localStorage.getItem('rol') !== 'gerente') location.href='/dashboard';
+</script>
+
+<div id="app"></div>
+
+<script>
+const token = localStorage.getItem('token');
+let lastReporteData = null;
+let lastReporteNombre = '';
+
+function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
+
+fetch('/layout.html')
+.then(r => r.text())
+.then(html => {
+  document.getElementById('app').innerHTML = html;
+  const content = document.querySelector('.content');
+
+  content.innerHTML = `
+    <h3 class="mb-4">📋 Nómina / Comisiones</h3>
+    <p class="text-muted">Configura comisiones por matrícula y por curso. Luego revisa el reporte por secretaria.</p>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-primary text-white">Configuración</div>
+      <div class="card-body">
+        <div class="row align-items-end mb-4">
+          <div class="col-md-4">
+            <label class="form-label">Comisión por cada matrícula (COP)</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" id="comisionMatricula" class="form-control" placeholder="0" min="0" step="1000">
+              <button class="btn btn-outline-primary" type="button" onclick="guardarConfig()">Guardar</button>
+            </div>
+          </div>
+        </div>
+
+        <h6 class="mb-3">Comisión por curso (COP)</h6>
+        <p class="small text-muted">Asigna el valor en pesos que gana la secretaria por cada curso vendido en una matrícula.</p>
+        <div class="table-responsive">
+          <table class="table table-bordered">
+            <thead class="table-light">
+              <tr>
+                <th>Curso</th>
+                <th style="width:180px">Comisión (COP)</th>
+                <th style="width:100px"></th>
+              </tr>
+            </thead>
+            <tbody id="tablaComisionesCurso">
+              <tr><td colspan="3" class="text-center">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <hr class="my-4">
+        <h6 class="mb-3">Básico por secretaria</h6>
+        <p class="small text-muted">Define el salario básico (mensual o quincenal). Se prorratea según el periodo del reporte para que cuadre.</p>
+        <div class="table-responsive">
+          <table class="table table-bordered">
+            <thead class="table-light">
+              <tr>
+                <th>Secretaria</th>
+                <th style="width:160px">Valor básico (COP)</th>
+                <th style="width:140px">Tipo</th>
+                <th style="width:100px"></th>
+              </tr>
+            </thead>
+            <tbody id="tablaBasico">
+              <tr><td colspan="4" class="text-center">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-success text-white">Reporte de nómina</div>
+      <div class="card-body">
+        <div class="row g-3 mb-4">
+          <div class="col-md-4">
+            <label class="form-label">Secretaria</label>
+            <select id="reporteUsuario" class="form-select">
+              <option value="">Seleccione...</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Desde</label>
+            <input type="date" id="reporteDesde" class="form-control">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Hasta</label>
+            <input type="date" id="reporteHasta" class="form-control">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-success w-100" onclick="calcularReporte()">Calcular</button>
+          </div>
+        </div>
+        <p class="small text-muted">Indica Desde y Hasta para que el básico se prorratee y cuadre en el total.</p>
+
+        <div id="reporteResultado" class="d-none">
+          <div class="alert alert-info">
+            <strong>Resumen (cuadrable)</strong><br>
+            Básico (período prorrateado): <span id="resBasico"></span><br>
+            Matrículas: <span id="resCountMat"></span> → <span id="resTotalMat"></span><br>
+            Comisión por cursos vendidos: <span id="resTotalCursos"></span><br>
+            <strong class="text-success">TOTAL A PAGAR: <span id="resTotal"></span></strong>
+          </div>
+          <button type="button" class="btn btn-danger mb-3" onclick="descargarPDF()">📄 Descargar PDF</button>
+          <details class="mb-2">
+            <summary>Detalle cursos vendidos</summary>
+            <div class="table-responsive mt-2">
+              <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                  <tr><th>Curso</th><th>Estudiante ID</th><th>Comisión</th></tr>
+                </thead>
+                <tbody id="reporteDetalleCursos"></tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+  `;
+
+  cargarConfig();
+  cargarComisionesCurso();
+  cargarBasico();
+  cargarUsuariosSecretaria();
+});
+
+async function cargarConfig(){
+  const res = await fetch('/api/nomina/config', { headers: { Authorization: 'Bearer ' + token } });
+  const d = await res.json();
+  document.getElementById('comisionMatricula').value = d.comision_por_matricula || 0;
+}
+
+async function guardarConfig(){
+  const v = parseInt(document.getElementById('comisionMatricula').value, 10) || 0;
+  await fetch('/api/nomina/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ comision_por_matricula: v })
+  });
+  alert('Configuración guardada.');
+}
+
+async function cargarComisionesCurso(){
+  const res = await fetch('/api/nomina/comisiones-curso', { headers: { Authorization: 'Bearer ' + token } });
+  const rows = await res.json();
+  const tbody = document.getElementById('tablaComisionesCurso');
+  tbody.innerHTML = rows.map(c => `
+    <tr>
+      <td>${c.nombre}</td>
+      <td>
+        <input type="number" class="form-control form-control-sm comision-curso" data-curso-id="${c.curso_id}" value="${c.valor_comision || 0}" min="0" step="1000" placeholder="0">
+      </td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="guardarComisionCurso(${c.curso_id})">Guardar</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function guardarComisionCurso(cursoId){
+  const input = document.querySelector(`.comision-curso[data-curso-id="${cursoId}"]`);
+  const v = Math.max(0, parseInt(input.value, 10) || 0);
+  fetch('/api/nomina/comisiones-curso/' + cursoId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ valor_comision: v })
+  }).then(() => alert('Comisión del curso guardada.'));
+}
+
+async function cargarBasico(){
+  const res = await fetch('/api/nomina/basico', { headers: { Authorization: 'Bearer ' + token } });
+  const rows = await res.json();
+  const tbody = document.getElementById('tablaBasico');
+  tbody.innerHTML = (rows || []).map(u => `
+    <tr>
+      <td>${u.usuario}</td>
+      <td><input type="number" class="form-control form-control-sm basico-valor" data-usuario-id="${u.usuario_id}" value="${u.valor_basico || 0}" min="0" step="1000" placeholder="0"></td>
+      <td>
+        <select class="form-select form-select-sm basico-tipo" data-usuario-id="${u.usuario_id}">
+          <option value="mensual" ${(u.tipo_basico || 'mensual') === 'mensual' ? 'selected' : ''}>Mensual</option>
+          <option value="quincenal" ${u.tipo_basico === 'quincenal' ? 'selected' : ''}>Quincenal</option>
+        </select>
+      </td>
+      <td><button class="btn btn-sm btn-primary" onclick="guardarBasico(${u.usuario_id})">Guardar</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="text-muted">No hay secretarias.</td></tr>';
+}
+
+function guardarBasico(usuarioId){
+  const valor = parseInt(document.querySelector(`.basico-valor[data-usuario-id="${usuarioId}"]`).value, 10) || 0;
+  const tipo = document.querySelector(`.basico-tipo[data-usuario-id="${usuarioId}"]`).value;
+  fetch('/api/nomina/basico/' + usuarioId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ valor_basico: valor, tipo_basico: tipo })
+  }).then(() => alert('Básico guardado.'));
+}
+
+async function cargarUsuariosSecretaria(){
+  const res = await fetch('/api/nomina/usuarios-secretaria', { headers: { Authorization: 'Bearer ' + token } });
+  const rows = await res.json();
+  const sel = document.getElementById('reporteUsuario');
+  sel.innerHTML = '<option value="">Seleccione secretaria...</option>' + (rows || []).map(u => `<option value="${u.id}">${u.usuario}</option>`).join('');
+}
+
+async function calcularReporte(){
+  const usuario_id = document.getElementById('reporteUsuario').value;
+  const desde = document.getElementById('reporteDesde').value;
+  const hasta = document.getElementById('reporteHasta').value;
+  if (!usuario_id) { alert('Seleccione una secretaria.'); return; }
+
+  const params = new URLSearchParams({ usuario_id });
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+
+  const res = await fetch('/api/nomina/reporte?' + params, { headers: { Authorization: 'Bearer ' + token } });
+  const d = await res.json();
+  if (!res.ok) { alert(d.mensaje || 'Error'); return; }
+
+  document.getElementById('resBasico').textContent = formatCOP(d.basico_periodo != null ? d.basico_periodo : 0);
+  document.getElementById('resCountMat').textContent = d.count_matriculas;
+  document.getElementById('resTotalMat').textContent = formatCOP(d.total_comision_matricula);
+  document.getElementById('resTotalCursos').textContent = formatCOP(d.total_comision_cursos);
+  document.getElementById('resTotal').textContent = formatCOP(d.total);
+
+  const detalle = document.getElementById('reporteDetalleCursos');
+  detalle.innerHTML = (d.cursos || []).map(c => `
+    <tr>
+      <td>${c.nombre}</td>
+      <td>${c.estudiante_id}</td>
+      <td>${formatCOP(c.valor_comision)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" class="text-muted">Sin detalle</td></tr>';
+
+  lastReporteData = d;
+  lastReporteNombre = document.getElementById('reporteUsuario').selectedOptions[0] ? document.getElementById('reporteUsuario').selectedOptions[0].text : 'Secretaria';
+  document.getElementById('reporteResultado').classList.remove('d-none');
+}
+
+function descargarPDF(){
+  if (!lastReporteData || typeof jspdf === 'undefined') {
+    alert('Calcule el reporte primero o espere a que cargue la librería PDF.');
+    return;
+  }
+  const { jsPDF } = jspdf;
+  const doc = new jsPDF();
+  const nombre = lastReporteNombre;
+  const desde = lastReporteData.desde || '-';
+  const hasta = lastReporteData.hasta || '-';
+
+  doc.setFontSize(16);
+  doc.text('Reporte de comisiones - Nómina', 14, 20);
+  doc.setFontSize(11);
+  doc.text('CEFORSEG S.A.S.', 14, 28);
+  doc.text('Secretaria: ' + nombre, 14, 35);
+  doc.text('Periodo: ' + desde + ' a ' + hasta, 14, 42);
+
+  doc.setFontSize(12);
+  doc.text('Resumen (cuadrable)', 14, 54);
+  doc.setFontSize(10);
+  const basico = lastReporteData.basico_periodo != null ? lastReporteData.basico_periodo : 0;
+  doc.text('Básico (período): ' + formatCOP(basico), 14, 62);
+  doc.text('Matrículas: ' + lastReporteData.count_matriculas + '  →  ' + formatCOP(lastReporteData.total_comision_matricula), 14, 69);
+  doc.text('Comisión por cursos: ' + formatCOP(lastReporteData.total_comision_cursos), 14, 76);
+  doc.setFontSize(11);
+  doc.text('TOTAL A PAGAR: ' + formatCOP(lastReporteData.total), 14, 85);
+
+  if (lastReporteData.cursos && lastReporteData.cursos.length > 0) {
+    doc.autoTable({
+      startY: 92,
+      head: [['Curso', 'Est. ID', 'Comisión']],
+      body: lastReporteData.cursos.map(c => [c.nombre, String(c.estudiante_id), formatCOP(c.valor_comision)]),
+      theme: 'grid',
+      headStyles: { fillColor: [10, 59, 120] }
+    });
+  }
+
+  const fecha = new Date().toISOString().slice(0, 10);
+  doc.setFontSize(8);
+  doc.text('Generado: ' + fecha + ' - CEFORSEG Panel', 14, doc.internal.pageSize.height - 10);
+
+  doc.save('nomina-comisiones-' + nombre.replace(/\s+/g, '-') + '-' + fecha + '.pdf');
+}
+</script>
+</body>
+</html>

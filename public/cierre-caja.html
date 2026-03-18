@@ -31,7 +31,7 @@ fetch('/layout.html')
         <div class="card shadow">
           <div class="card-body">
             <small>Efectivo sistema</small>
-            <h4 id="efectivoSistema">$0</h4>
+            <h4 id="efectivoSistema">$0 COP</h4>
           </div>
         </div>
       </div>
@@ -40,7 +40,7 @@ fetch('/layout.html')
         <div class="card shadow">
           <div class="card-body">
             <small>Nequi sistema</small>
-            <h4 id="nequiSistema">$0</h4>
+            <h4 id="nequiSistema">$0 COP</h4>
           </div>
         </div>
       </div>
@@ -49,7 +49,7 @@ fetch('/layout.html')
         <div class="card shadow">
           <div class="card-body">
             <small>Total sistema</small>
-            <h4 id="totalSistema">$0</h4>
+            <h4 id="totalSistema">$0 COP</h4>
           </div>
         </div>
       </div>
@@ -85,14 +85,9 @@ async function cargarDatos(){
 
   const d = await res.json();
 
-  efectivoSistema.innerText =
-    '$' + d.efectivo_sistema.toLocaleString();
-
-  nequiSistema.innerText =
-    '$' + d.nequi_sistema.toLocaleString();
-
-  totalSistema.innerText =
-    '$' + d.total_sistema.toLocaleString();
+  efectivoSistema.innerText = (typeof formatCOP === 'function' ? formatCOP(d.efectivo_sistema) : '$' + Number(d.efectivo_sistema).toLocaleString('es-CO') + ' COP');
+  nequiSistema.innerText = (typeof formatCOP === 'function' ? formatCOP(d.nequi_sistema) : '$' + Number(d.nequi_sistema).toLocaleString('es-CO') + ' COP');
+  totalSistema.innerText = (typeof formatCOP === 'function' ? formatCOP(d.total_sistema) : '$' + Number(d.total_sistema).toLocaleString('es-CO') + ' COP');
 }
 
 async function cerrarCaja(){

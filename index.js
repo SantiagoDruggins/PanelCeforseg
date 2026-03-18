@@ -91,7 +91,7 @@ app.get('/api/dashboard',
                             "SELECT COUNT(DISTINCT estudiante_id) total FROM estudiante_cursos WHERE saldo>0",
                             (_, deudores) => {
 
-                              res.json({
+res.json({
                                 estudiantes: estudiantes.total,
                                 cursos: cursos.total,
                                 recaudo_hoy: hoy.total,
@@ -113,7 +113,59 @@ app.get('/api/dashboard',
         }
       );
     });
-});
+  });
+
+/* Dashboard auditoría (solo gerente): caja, últimos abonos, último cierre */
+app.get('/api/dashboard/auditoria',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.all(`
+      SELECT metodo_pago, IFNULL(SUM(valor),0) AS total
+      FROM abonos
+      WHERE DATE(fecha,'localtime') = DATE('now','localtime')
+      GROUP BY metodo_pago
+    `, [], (_, rowsMetodo) => {
+      const recaudo = { efectivo: 0, nequi: 0, transferencia: 0, total: 0 };
+      (rowsMetodo || []).forEach(r => {
+        const t = Number(r.total) || 0;
+        if (r.metodo_pago === 'efectivo') recaudo.efectivo = t;
+        else if (r.metodo_pago === 'nequi') recaudo.nequi = t;
+        else recaudo.transferencia += t;
+        recaudo.total += t;
+      });
+
+      db.get(`
+        SELECT cc.id, cc.fecha, cc.efectivo_sistema, cc.nequi_sistema, cc.total_sistema,
+               cc.efectivo_reportado, cc.nequi_reportado, cc.diferencia, u.usuario
+        FROM cierres_caja cc
+        LEFT JOIN usuarios u ON u.id = cc.usuario_id
+        ORDER BY cc.fecha DESC LIMIT 1
+      `, [], (_, ultimoCierre) => {
+        db.all(`
+          SELECT a.id, a.valor, a.fecha, a.metodo_pago, a.numero_factura,
+                 e.nombre AS estudiante, u.usuario AS registrado_por
+          FROM abonos a
+          LEFT JOIN estudiantes e ON e.id = a.estudiante_id
+          LEFT JOIN usuarios u ON u.id = a.usuario_id
+          ORDER BY a.fecha DESC LIMIT 15
+        `, [], (_, ultimosAbonos) => {
+          db.get(
+            "SELECT COUNT(*) c FROM cierres_caja WHERE DATE(fecha,'localtime') = DATE('now','localtime')",
+            [],
+            (_, cierreHoy) => {
+              res.json({
+                recaudo_hoy: recaudo,
+                ultimo_cierre: ultimoCierre || null,
+                cierre_hecho_hoy: (cierreHoy && cierreHoy.c > 0),
+                ultimos_abonos: ultimosAbonos || []
+              });
+            }
+          );
+        });
+      });
+    });
+  });
 
 
 /* =====================================================
@@ -304,6 +356,43 @@ const uploadCert = multer({
 });
 
 /* =====================================================
+   DEUDORES / MOROSOS (auditoría para cobros masivos)
+===================================================== */
+app.get('/api/estudiantes/deudores',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    const morosoDesde = (req.query.moroso_desde || '').trim().slice(0, 10);
+
+    db.all(`
+      SELECT 
+        e.id,
+        e.nombre,
+        e.cedula,
+        e.telefono,
+        e.email,
+        SUM(ec.saldo) AS total_deuda,
+        (SELECT MAX(fecha) FROM abonos WHERE estudiante_id = e.id) AS ultimo_abono,
+        GROUP_CONCAT(c.nombre || ' $' || ec.saldo, ' · ') AS detalle_cursos
+      FROM estudiantes e
+      JOIN estudiante_cursos ec ON ec.estudiante_id = e.id AND ec.saldo > 0
+      LEFT JOIN cursos c ON c.id = ec.curso_id
+      GROUP BY e.id
+      ORDER BY ultimo_abono ASC, e.nombre
+    `, [], (_, rows) => {
+      let list = rows || [];
+      if (morosoDesde) {
+        const corte = morosoDesde + 'T23:59:59.999Z';
+        list = list.filter(r => {
+          const u = r.ultimo_abono;
+          return !u || u < corte;
+        });
+      }
+      res.json(list);
+    });
+  });
+
+/* =====================================================
    LISTAR ESTUDIANTES
 ===================================================== */
 app.get('/api/estudiantes',
@@ -343,10 +432,10 @@ app.post('/api/estudiantes',
 
     db.run(`
       INSERT INTO estudiantes
-      (nombre, cedula, telefono, ciudad, direccion, foto, email, contacto_emergencia, fecha_matricula)
-      VALUES (?,?,?,?,?,?,?,?,?)
+      (nombre, cedula, telefono, ciudad, direccion, foto, email, contacto_emergencia, fecha_matricula, usuario_matricula_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
     `,
-    [nombre, cedula, telefono, ciudad, direccion, foto, email || null, contacto_emergencia || null, fechaMat],
+    [nombre, cedula, telefono, ciudad, direccion, foto, email || null, contacto_emergencia || null, fechaMat, req.usuario?.id || null],
     function(err){
       if(err) return res.status(400).json({ mensaje:'Cédula ya registrada' });
 
@@ -642,6 +731,178 @@ app.get('/api/auditoria',
   });
 
 /* =====================================================
+   NÓMINA / COMISIONES (SOLO GERENTE)
+===================================================== */
+app.get('/api/nomina/config',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.get('SELECT valor FROM config WHERE clave=?', ['comision_por_matricula'], (_, row) => {
+      res.json({ comision_por_matricula: row ? parseInt(row.valor, 10) || 0 : 0 });
+    });
+  });
+
+app.put('/api/nomina/config',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const v = Math.max(0, parseInt(req.body.comision_por_matricula, 10) || 0);
+    db.run(
+      'INSERT INTO config (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=?',
+      ['comision_por_matricula', String(v), String(v)],
+      function() { res.json({ comision_por_matricula: v }); }
+    );
+  });
+
+app.get('/api/nomina/comisiones-curso',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.all(`
+      SELECT c.id AS curso_id, c.nombre, IFNULL(cc.valor_comision, 0) AS valor_comision
+      FROM cursos c
+      LEFT JOIN comisiones_curso cc ON cc.curso_id = c.id
+      WHERE c.activo = 1
+      ORDER BY c.nombre
+    `, [], (_, rows) => res.json(rows || []));
+  });
+
+app.put('/api/nomina/comisiones-curso/:curso_id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const curso_id = parseInt(req.params.curso_id, 10);
+    const valor_comision = Math.max(0, parseInt(req.body.valor_comision, 10) || 0);
+    db.run(
+      'INSERT INTO comisiones_curso (curso_id, valor_comision) VALUES (?,?) ON CONFLICT(curso_id) DO UPDATE SET valor_comision=?',
+      [curso_id, valor_comision, valor_comision],
+      function() { res.json({ curso_id, valor_comision }); }
+    );
+  });
+
+app.get('/api/nomina/reporte',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const usuario_id = req.query.usuario_id;
+    const desde = (req.query.desde || '').trim().slice(0, 10);
+    const hasta = (req.query.hasta || '').trim().slice(0, 10);
+    if (!usuario_id) return res.status(400).json({ mensaje: 'Falta usuario_id' });
+
+    db.get('SELECT valor FROM config WHERE clave=?', ['comision_por_matricula'], (_, configRow) => {
+      const comisionPorMatricula = configRow ? parseInt(configRow.valor, 10) || 0 : 0;
+
+      const filtroFecha = (desde && hasta)
+        ? " AND DATE(e.fecha_matricula) BETWEEN DATE(?) AND DATE(?)"
+        : (desde ? " AND DATE(e.fecha_matricula) >= DATE(?)" : "") + (hasta ? " AND DATE(e.fecha_matricula) <= DATE(?)" : "");
+      const paramsFecha = [desde, hasta].filter(Boolean);
+
+      db.all(
+        `SELECT e.id, e.nombre, e.fecha_matricula
+         FROM estudiantes e
+         WHERE e.usuario_matricula_id = ? ${filtroFecha}
+         ORDER BY e.fecha_matricula DESC`,
+        [usuario_id, ...paramsFecha],
+        (_, matriculas) => {
+          const countMatriculas = (matriculas || []).length;
+          const totalComisionMatricula = countMatriculas * comisionPorMatricula;
+
+          db.all(
+            `SELECT c.id AS curso_id, c.nombre, ec.estudiante_id, e.fecha_matricula,
+                    (SELECT IFNULL(cc.valor_comision, 0) FROM comisiones_curso cc WHERE cc.curso_id = c.id) AS valor_comision
+             FROM estudiante_cursos ec
+             JOIN estudiantes e ON e.id = ec.estudiante_id
+             JOIN cursos c ON c.id = ec.curso_id
+             WHERE e.usuario_matricula_id = ? ${filtroFecha}`,
+            [usuario_id, ...paramsFecha],
+            (err, rows) => {
+              if (err) return res.status(500).json({ mensaje: 'Error calculando cursos' });
+              const cursos = (rows || []).map(r => ({
+                curso_id: r.curso_id,
+                nombre: r.nombre,
+                estudiante_id: r.estudiante_id,
+                valor_comision: r.valor_comision || 0
+              }));
+              const totalComisionCursos = cursos.reduce((s, x) => s + (x.valor_comision || 0), 0);
+              const totalComisiones = totalComisionMatricula + totalComisionCursos;
+
+              db.get('SELECT valor_basico, tipo_basico FROM nomina_basico WHERE usuario_id=?', [usuario_id], (_, basicoRow) => {
+                let basico_periodo = 0;
+                const valor_basico = basicoRow ? (parseInt(basicoRow.valor_basico, 10) || 0) : 0;
+                const tipo_basico = basicoRow && basicoRow.tipo_basico === 'quincenal' ? 'quincenal' : 'mensual';
+
+                if (valor_basico > 0 && desde && hasta) {
+                  const d1 = new Date(desde + 'T12:00:00');
+                  const d2 = new Date(hasta + 'T12:00:00');
+                  const diasPeriodo = Math.max(1, Math.ceil((d2 - d1) / (24 * 60 * 60 * 1000)) + 1);
+                  if (tipo_basico === 'quincenal') {
+                    basico_periodo = Math.round(valor_basico * (diasPeriodo / 15));
+                  } else {
+                    basico_periodo = Math.round(valor_basico * (diasPeriodo / 30));
+                  }
+                }
+
+                res.json({
+                  usuario_id: parseInt(usuario_id, 10),
+                  desde,
+                  hasta,
+                  basico_config: { valor_basico, tipo_basico },
+                  basico_periodo,
+                  comision_por_matricula: comisionPorMatricula,
+                  matriculas: matriculas || [],
+                  count_matriculas: countMatriculas,
+                  total_comision_matricula: totalComisionMatricula,
+                  cursos,
+                  total_comision_cursos: totalComisionCursos,
+                  total_comisiones: totalComisiones,
+                  total: basico_periodo + totalComisiones
+                });
+              });
+            }
+          );
+        }
+      );
+    });
+  });
+
+app.get('/api/nomina/usuarios-secretaria',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.all('SELECT id, usuario, rol FROM usuarios WHERE rol = ? ORDER BY usuario', ['secretaria'], (_, rows) => res.json(rows || []));
+  });
+
+app.get('/api/nomina/basico',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.all(`
+      SELECT u.id AS usuario_id, u.usuario,
+             IFNULL(nb.valor_basico, 0) AS valor_basico,
+             IFNULL(nb.tipo_basico, 'mensual') AS tipo_basico
+      FROM usuarios u
+      LEFT JOIN nomina_basico nb ON nb.usuario_id = u.id
+      WHERE u.rol = 'secretaria'
+      ORDER BY u.usuario
+    `, [], (_, rows) => res.json(rows || []));
+  });
+
+app.put('/api/nomina/basico/:usuario_id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const usuario_id = parseInt(req.params.usuario_id, 10);
+    const valor_basico = Math.max(0, parseInt(req.body.valor_basico, 10) || 0);
+    const tipo_basico = (req.body.tipo_basico === 'quincenal') ? 'quincenal' : 'mensual';
+    db.run(
+      `INSERT INTO nomina_basico (usuario_id, valor_basico, tipo_basico)
+       VALUES (?,?,?) ON CONFLICT(usuario_id) DO UPDATE SET valor_basico=excluded.valor_basico, tipo_basico=excluded.tipo_basico`,
+      [usuario_id, valor_basico, tipo_basico],
+      function() { res.json({ usuario_id, valor_basico, tipo_basico }); }
+    );
+  });
+
+/* =====================================================
    HISTORIAL DE CIERRES (GERENTE)
 ===================================================== */
 app.get('/api/cierres-caja',
@@ -735,7 +996,13 @@ app.get('/auditoria-panel', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/auditoria.html'))
 );
 
+app.get('/nomina-panel', (_, res) =>
+  res.sendFile(path.join(__dirname, 'public/nomina.html'))
+);
 
+app.get('/deudores-panel', (_, res) =>
+  res.sendFile(path.join(__dirname, 'public/deudores.html'))
+);
 
 /* =====================================================
    REGISTRAR CIERRE DE CAJA

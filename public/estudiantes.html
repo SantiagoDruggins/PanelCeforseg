@@ -89,7 +89,7 @@ function renderTabla(data){
         <td>${e.nombre}</td>
         <td>${e.cedula}</td>
         <td>${e.cursos || '-'}</td>
-        <td>$${Number(e.saldo || 0).toLocaleString()}</td>
+        <td>${typeof formatCOP === 'function' ? formatCOP(e.saldo || 0) : '$' + Number(e.saldo || 0).toLocaleString('es-CO') + ' COP'}</td>
         <td>
           <a href="/estudiante-ficha?id=${e.id}" class="btn btn-primary btn-sm">
             Ver ficha
