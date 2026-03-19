@@ -117,6 +117,22 @@ async function cargarFicha(){
             <input id="contacto_emergencia" class="form-control mb-2" placeholder="En caso de accidente llamar a" value="${e.contacto_emergencia || ''}">
             <input id="fecha_matricula" class="form-control mb-2" type="date" value="${e.fecha_matricula || ''}">
             <button class="btn btn-warning" onclick="guardarCambios()"><i class="bi bi-save2 me-1"></i>Guardar cambios</button>
+
+            <hr class="my-3">
+
+            <div class="vf-info">
+              <span class="vf-label mb-2">Agregar más cursos (paquetes)</span>
+
+              <select id="nuevo_curso_id" class="form-select mb-2">
+                <option value="">Cargando cursos...</option>
+              </select>
+
+              <button class="btn btn-primary w-100" onclick="agregarCursoEstudiante()">
+                <i class="bi bi-plus-circle me-1"></i>Agregar curso
+              </button>
+
+              <div id="msgAgregarCurso" class="text-muted small mt-2"></div>
+            </div>
           ` : `
             <h4 class="mb-3 fw-bold">${e.nombre}</h4>
 
@@ -162,6 +178,18 @@ async function cargarFicha(){
 
     <h5 class="mb-3 mt-2 fw-bold"><i class="bi bi-mortarboard me-2"></i>Cursos matriculados</h5>
     <div id="listaCursos"></div>
+    <div id="resumenCursos" class="vf-info mb-4">
+      <div class="row g-2">
+        <div class="col-md-6">
+          <span class="vf-label mb-1">Valor total</span>
+          <div class="vf-value" id="valorTotalCursos">—</div>
+        </div>
+        <div class="col-md-6">
+          <span class="vf-label mb-1">Saldo total</span>
+          <div class="vf-value" id="saldoTotalCursos">—</div>
+        </div>
+      </div>
+    </div>
 
     <div class="card mb-4 shadow-sm">
       <div class="card-body">
@@ -232,14 +260,30 @@ async function cargarFicha(){
 
   renderCursos(e.cursos);
   cargarAbonos();
+
+  if(editMode){
+    cargarCursosDisponiblesParaAgregar(e.cursos);
+  }
 }
 
 function renderCursos(cursos){
   const cont = document.getElementById('listaCursos');
   const select = document.getElementById('curso_id');
+  const elValorTotal = document.getElementById('valorTotalCursos');
+  const elSaldoTotal = document.getElementById('saldoTotalCursos');
 
   cont.innerHTML = '';
   select.innerHTML = '<option value="">Seleccione curso</option>';
+
+  const totalPrecio = (cursos || []).reduce((acc, c) => acc + Number(c.precio || 0), 0);
+  const totalSaldo = (cursos || []).reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+  const fmt = (v) => {
+    if(typeof formatCOP === 'function') return formatCOP(v);
+    return '$' + Number(v).toLocaleString('es-CO') + ' COP';
+  };
+
+  if(elValorTotal) elValorTotal.textContent = fmt(totalPrecio);
+  if(elSaldoTotal) elSaldoTotal.textContent = fmt(totalSaldo);
 
   cursos.forEach(c => {
     cont.innerHTML += `
@@ -383,6 +427,63 @@ async function guardarCambios(){
   const data = await res.json();
   alert(data.mensaje);
   if(res.ok) location.href = '/estudiante-ficha?id=' + id;
+}
+
+async function cargarCursosDisponiblesParaAgregar(cursosActuales){
+  const select = document.getElementById('nuevo_curso_id');
+  const msg = document.getElementById('msgAgregarCurso');
+  if(!select) return;
+
+  select.innerHTML = '<option value="">Seleccione un curso</option>';
+  if(msg) msg.textContent = '';
+
+  const idsActuales = new Set((cursosActuales || []).map(c => String(c.curso_id)));
+
+  const res = await fetch('/api/cursos', {
+    headers:{ Authorization:'Bearer ' + token }
+  });
+  const cursos = await res.json();
+
+  const disponibles = (cursos || []).filter(c => !idsActuales.has(String(c.id)));
+
+  if(!disponibles.length){
+    select.innerHTML = '<option value="">No hay cursos disponibles</option>';
+    if(msg) msg.textContent = 'El estudiante ya tiene todos los cursos activos.';
+    return;
+  }
+
+  disponibles.forEach(c => {
+    select.innerHTML += `<option value="${c.id}">${c.nombre} - ${typeof formatCOP === 'function' ? formatCOP(c.precio) : '$' + Number(c.precio).toLocaleString('es-CO') + ' COP'}</option>`;
+  });
+}
+
+async function agregarCursoEstudiante(){
+  const curso_id = document.getElementById('nuevo_curso_id').value;
+  const msg = document.getElementById('msgAgregarCurso');
+
+  if(!curso_id){
+    if(msg) msg.textContent = 'Seleccione un curso para agregar.';
+    alert('Seleccione un curso para agregar.');
+    return;
+  }
+
+  const res = await fetch('/api/estudiantes/' + id + '/curso', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer ' + token
+    },
+    body: JSON.stringify({ curso_id })
+  });
+
+  const data = await res.json();
+  if(!res.ok){
+    alert(data.mensaje || 'Error al agregar curso');
+    return;
+  }
+
+  // Recargamos la ficha para que se refleje el nuevo curso y el saldo.
+  cargarFicha();
 }
 </script>
 
