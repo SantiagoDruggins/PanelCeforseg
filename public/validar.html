@@ -33,8 +33,37 @@ body{
   box-shadow:0 40px 80px rgba(0,0,0,.3);
 }
 
-h2{text-align:center;margin-bottom:6px}
-.subtitle{text-align:center;color:#555;margin-bottom:30px}
+.brand{
+  text-align:center;
+  margin-bottom:22px;
+}
+.logo-wrap{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:#fff; /* blanco para que el recuadro del logo no contraste en el fondo azul */
+  padding:10px 18px;
+  border-radius:16px;
+  margin-bottom:14px;
+}
+.logo-wrap img{
+  height:46px;
+  width:auto;
+  display:block;
+}
+h2{
+  text-align:center;
+  margin:0 0 6px 0;
+  color:var(--azul-institucional);
+  font-weight:800;
+  letter-spacing:.2px;
+}
+.subtitle{
+  text-align:center;
+  color:#475569;
+  margin-bottom:0;
+  font-weight:500;
+}
 
 .search{
   display:flex;
@@ -121,6 +150,19 @@ tbody tr:nth-child(even){
   font-weight:600;
 }
 
+.badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-left:auto;
+  font-weight:700;
+  background:#e0f2fe;
+  border:1px solid rgba(10,59,120,.2);
+  padding:6px 10px;
+  border-radius:999px;
+  color:var(--azul-institucional);
+}
+
 .footer{
   text-align:center;
   margin-top:32px;
@@ -128,12 +170,14 @@ tbody tr:nth-child(even){
 
 .footer a{
   padding:12px 26px;
-  background:#020617;
+  background:var(--azul-institucional);
   color:#fff;
   border-radius:12px;
   text-decoration:none;
   font-weight:500;
 }
+
+.footer a:hover{ background:var(--azul-oscuro); }
 </style>
 </head>
 
@@ -157,8 +201,13 @@ function escapeHtml(s){
 
 document.getElementById('app').innerHTML = `
   <div class="card">
-    <h2>🔎 Validar Certificados</h2>
-    <div class="subtitle">Ingrese la cédula del estudiante para consultar</div>
+    <div class="brand">
+      <div class="logo-wrap">
+        <img src="/assets/logo.png" alt="CEFORSEG">
+      </div>
+      <h2>VALIDAR CERTIFICADOS</h2>
+      <div class="subtitle">Ingrese la cédula para consultar</div>
+    </div>
 
     <div class="search">
       <input id="cedula" placeholder="Número de cédula" inputmode="numeric">
@@ -168,7 +217,7 @@ document.getElementById('app').innerHTML = `
     <div id="resultado"></div>
 
     <div class="footer">
-      <a href="/login">Inicio</a>
+      <a href="/login">Ir al inicio</a>
     </div>
   </div>
 `;
@@ -180,7 +229,7 @@ async function validar(){
   const cont = document.getElementById('resultado');
   cont.innerHTML = `
     <div class="success">
-      ⏳ Validando cédula...
+      Validando cédula...
     </div>
   `;
 
@@ -192,7 +241,7 @@ async function validar(){
   if(!data.valido){
     cont.innerHTML = `
       <div class="error">
-        ❌ No se encontraron certificados válidos para <b>${escapeHtml(cedula)}</b>
+        No se encontraron certificados válidos para <b>${escapeHtml(cedula)}</b>.
       </div>
     `;
     return;
@@ -203,8 +252,8 @@ async function validar(){
 
   cont.innerHTML = `
     <div class="success">
-      ✅ Certificados válidos para <b>${nombre}</b>
-      <span style="margin-left:auto; font-weight:600; background:#d1fae5; padding:6px 10px; border-radius:999px;">
+      Certificados válidos para <b>${nombre}</b>
+      <span class="badge">
         ${certificados.length} certificado(s)
       </span>
     </div>
