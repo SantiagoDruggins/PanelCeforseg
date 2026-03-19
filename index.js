@@ -143,7 +143,7 @@ app.get('/api/dashboard/auditoria',
         ORDER BY cc.fecha DESC LIMIT 1
       `, [], (_, ultimoCierre) => {
         db.all(`
-          SELECT a.id, a.valor, a.fecha, a.metodo_pago, a.numero_factura,
+          SELECT a.id, a.valor, a.fecha, a.metodo_pago, a.numero_factura, a.nota,
                  e.nombre AS estudiante, u.usuario AS registrado_por
           FROM abonos a
           LEFT JOIN estudiantes e ON e.id = a.estudiante_id

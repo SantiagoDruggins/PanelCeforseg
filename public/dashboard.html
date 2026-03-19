@@ -208,10 +208,11 @@ fetch('/layout.html')
                   <th>Método</th>
                   <th>Factura</th>
                   <th>Registrado por</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody id="tablaUltimosAbonos">
-                <tr><td colspan="6" class="text-center text-muted">Cargando...</td></tr>
+                <tr><td colspan="7" class="text-center text-muted">Cargando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -255,16 +256,28 @@ fetch('/layout.html')
       const tbody = document.getElementById('tablaUltimosAbonos');
       if (tbody) {
         if (!d.ultimos_abonos || d.ultimos_abonos.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin abonos recientes</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Sin abonos recientes</td></tr>';
         } else {
           tbody.innerHTML = d.ultimos_abonos.map(a=>`
-            <tr>
+            <tr
+              data-abono-id="${a.id}"
+              data-valor="${a.valor}"
+              data-nota="${escapeAttr(a.nota || '')}"
+              data-metodo="${escapeAttr(a.metodo_pago || 'efectivo')}"
+              data-factura="${escapeAttr(a.numero_factura || '')}"
+            >
               <td>${(a.fecha||'').toString().slice(0,16).replace('T',' ')}</td>
               <td>${(a.estudiante||'—').toString().slice(0,25)}</td>
               <td>${fmt(a.valor)}</td>
               <td>${(a.metodo_pago||'efectivo')}</td>
               <td>${(a.numero_factura||'—').toString().slice(0,12)}</td>
               <td>${(a.registrado_por||'—')}</td>
+              <td>
+                <div class="d-flex gap-1 justify-content-center">
+                  <button class="btn btn-sm btn-outline-secondary" onclick="editarAbonoDashboard(this)">Editar</button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="eliminarAbonoDashboard(this)">Eliminar</button>
+                </div>
+              </td>
             </tr>
           `).join('');
         }
@@ -272,6 +285,60 @@ fetch('/layout.html')
     });
   }
 });
+
+function escapeAttr(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function editarAbonoDashboard(btn){
+  const tr = btn.closest('tr');
+  const id = tr.getAttribute('data-abono-id');
+  const valor = tr.getAttribute('data-valor');
+  const nota = tr.getAttribute('data-nota') || '';
+  const metodo = tr.getAttribute('data-metodo') || 'efectivo';
+  const factura = tr.getAttribute('data-factura') || '';
+
+  const v = prompt('Valor del abono:', valor);
+  if(v === null) return;
+
+  const n = prompt('Número de factura (obligatorio):', factura);
+  if(n === null) return;
+  if(!n.toString().trim()){ alert('El número de factura es obligatorio.'); return; }
+
+  const no = prompt('Nota:', nota);
+  if(no === null) return;
+
+  const met = prompt('Método de pago:', metodo);
+  if(met === null) return;
+
+  fetch('/api/abonos/' + id, {
+    method:'PUT',
+    headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + localStorage.getItem('token') },
+    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n })
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    alert(data.mensaje || 'Actualizado');
+    location.reload();
+  });
+}
+
+function eliminarAbonoDashboard(btn){
+  const tr = btn.closest('tr');
+  const id = tr.getAttribute('data-abono-id');
+
+  if(!confirm('¿Eliminar este abono? Se restituirá el saldo al curso.')) return;
+
+  fetch('/api/abonos/' + id, {
+    method:'DELETE',
+    headers:{ Authorization:'Bearer ' + localStorage.getItem('token') }
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    alert(data.mensaje || 'Eliminado');
+    location.reload();
+  });
+}
 </script>
 </body>
 </html>
