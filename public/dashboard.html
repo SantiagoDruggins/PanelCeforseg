@@ -5,12 +5,25 @@
 <title>Dashboard - CEFORSEG</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
   .card-acceso { transition: transform .15s; }
   .card-acceso:hover { transform: translateY(-2px); }
   .card-acceso a { text-decoration: none; color: inherit; display: block; padding: 1rem; }
   .card-acceso .h5 { margin: 0; }
   .card-acceso small { opacity: .85; }
+  .card-acceso .icono{
+    font-size:28px;
+    width:44px;
+    height:44px;
+    border-radius:14px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(10,59,120,.06);
+    color:#0a3b78;
+    margin-bottom:6px;
+  }
 </style>
 </head>
 
@@ -33,14 +46,14 @@ fetch('/layout.html')
 
   if (rol === 'secretaria') {
     content.innerHTML = `
-      <h3 class="fw-bold mb-3">📋 Operativo</h3>
+      <h3 class="fw-bold mb-3"><i class="bi bi-clipboard-check me-2"></i>Operativo</h3>
       <p class="text-muted mb-4">Accesos directos a lo que más usas.</p>
 
       <div class="row g-3 mb-4">
         <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso border-primary">
             <a href="/matricular">
-              <span class="fs-2">➕</span>
+              <div class="icono"><i class="bi bi-plus-circle-fill"></i></div>
               <h5 class="mt-2">Matricular</h5>
               <small class="text-muted">Registrar nuevo estudiante y cursos</small>
             </a>
@@ -49,7 +62,7 @@ fetch('/layout.html')
         <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso border-primary">
             <a href="/estudiantes-panel">
-              <span class="fs-2">👥</span>
+              <div class="icono"><i class="bi bi-people-fill"></i></div>
               <h5 class="mt-2">Estudiantes</h5>
               <small class="text-muted">Buscar y ver fichas</small>
             </a>
@@ -58,7 +71,7 @@ fetch('/layout.html')
         <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso border-success">
             <a href="/cierre-caja">
-              <span class="fs-2">💰</span>
+              <div class="icono"><i class="bi bi-cash-coin"></i></div>
               <h5 class="mt-2">Cierre de caja</h5>
               <small class="text-muted">Conteo y cierre del día</small>
             </a>
@@ -67,7 +80,7 @@ fetch('/layout.html')
         <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso">
             <a href="/certificados-panel">
-              <span class="fs-2">📄</span>
+              <div class="icono"><i class="bi bi-file-earmark-text"></i></div>
               <h5 class="mt-2">Certificados</h5>
               <small class="text-muted">Subir y gestionar diplomas</small>
             </a>
@@ -76,7 +89,7 @@ fetch('/layout.html')
         <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso">
             <a href="/validar">
-              <span class="fs-2">✔️</span>
+              <div class="icono"><i class="bi bi-check2-circle"></i></div>
               <h5 class="mt-2">Validar certificado</h5>
               <small class="text-muted">Consultar por cédula</small>
             </a>
@@ -105,7 +118,7 @@ fetch('/layout.html')
     `;
   } else {
     content.innerHTML = `
-      <h3 class="fw-bold mb-3">📊 Auditoría y caja</h3>
+      <h3 class="fw-bold mb-3"><i class="bi bi-shield-check me-2"></i>Auditoría y caja</h3>
       <p class="text-muted mb-4">Vista gerente: caja, movimientos y totales.</p>
 
       <div id="alertaCierre" class="alert alert-warning d-none mb-3">Aún no hay cierre de caja hoy. Revisa con la secretaria.</div>
