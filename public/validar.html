@@ -8,6 +8,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 
 <style>
+:root{
+  --azul-institucional:#0a3b78;
+  --azul-oscuro:#062f5c;
+}
 *{box-sizing:border-box;font-family:'Inter',sans-serif}
 
 body{
@@ -47,22 +51,22 @@ h2{text-align:center;margin-bottom:6px}
   padding:18px 34px;
   border:none;
   border-radius:16px;
-  background:#2563eb;
+  background:var(--azul-institucional);
   color:#fff;
   font-weight:600;
   cursor:pointer;
 }
 
-.search button:hover{background:#1e40af}
+.search button:hover{background:var(--azul-oscuro)}
 
 #resultado{margin-top:32px}
 
 .success{
-  background:#ecfdf5;
-  border:1px solid #10b981;
+  background:#eff6ff;
+  border:1px solid var(--azul-institucional);
   padding:18px;
   border-radius:16px;
-  color:#065f46;
+  color:var(--azul-institucional);
   margin-bottom:22px;
   font-weight:600;
   display:flex;
@@ -88,7 +92,7 @@ table{
 }
 
 thead{
-  background:#0f172a;
+  background:var(--azul-institucional);
   color:#fff;
 }
 
@@ -107,7 +111,7 @@ tbody tr:nth-child(even){
   align-items:center;
   justify-content:center;
   padding:10px 18px;
-  background:#10b981;
+  background:var(--azul-institucional);
   color:#fff;
   border-radius:10px;
   text-decoration:none;
@@ -181,7 +185,7 @@ async function validar(){
 
   const cont = document.getElementById('resultado');
   cont.innerHTML = `
-    <div class="success" style="background:#eff6ff;border-color:#2563eb;color:#1d4ed8;">
+    <div class="success">
       ⏳ Validando cédula...
     </div>
   `;
