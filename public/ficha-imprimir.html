@@ -23,6 +23,16 @@
       background-position: top center;
       background-color: #fff;
       box-shadow: 0 2px 12px rgba(0,0,0,.2);
+      overflow: hidden;
+    }
+    .ficha-plantilla {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: fill; /* Mantiene escala para que el POS funcione */
+      z-index: 1;
     }
     .ficha-overlay {
       position: absolute;
@@ -31,6 +41,7 @@
       min-height: 297mm;
       padding: 0;
       pointer-events: none;
+      z-index: 2;
     }
     .ficha-overlay .campo {
       position: absolute;
@@ -55,13 +66,15 @@
   <div class="no-print">
     <a href="#" id="btnVolver">← Volver</a>
     <button type="button" onclick="window.print()" style="margin-left:12px; padding:10px 20px; cursor:pointer; background:#0a3b78; color:#fff; border:none; border-radius:6px;">
-      🖨️ Imprimir acta de matrícula
+      Imprimir acta de matrícula
     </button>
     <p id="msgCarga" class="text-muted"></p>
     <p class="small text-muted mt-2">Ficha en blanco: <strong>public/assets/ficha-matricula-blanca.png</strong> (o .jpg). Ajuste el objeto POS en este archivo si algún campo no coincide.</p>
   </div>
 
-  <div id="fichaContainer" class="ficha-container"></div>
+  <div id="fichaContainer" class="ficha-container">
+    <img id="fichaPlantilla" class="ficha-plantilla" alt="Plantilla de matrícula" src="/assets/ficha-matricula-blanca.png">
+  </div>
 
 <script>
 (function() {
@@ -93,8 +106,13 @@
     .then(e => {
       if (!e.id) { msg.textContent = 'Estudiante no encontrado'; return; }
 
-      var bg = "url('/assets/ficha-matricula-blanca.png')";
-      container.style.backgroundImage = bg;
+      // Usamos <img> para que la plantilla se imprima siempre (a diferencia de background-image).
+      const imgPlantilla = document.getElementById('fichaPlantilla');
+      imgPlantilla.src = '/assets/ficha-matricula-blanca.png';
+      imgPlantilla.onerror = function() {
+        imgPlantilla.onerror = null;
+        imgPlantilla.src = '/assets/ficha-matricula-blanca.jpg';
+      };
 
       const cursosTexto = (e.cursos && e.cursos.length)
         ? e.cursos.map(c => c.nombre).join('  •  ')
