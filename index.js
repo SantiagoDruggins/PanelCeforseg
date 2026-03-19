@@ -183,6 +183,20 @@ app.get('/api/cursos',
     );
 });
 
+app.get('/api/cursos/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    db.get(
+      'SELECT id, nombre, descripcion, precio FROM cursos WHERE id=? AND activo=1',
+      [req.params.id],
+      (_, row) => {
+        if (!row) return res.status(404).json({ mensaje: 'Curso no encontrado' });
+        res.json(row);
+      }
+    );
+  });
+
 app.post('/api/cursos',
   verificarToken,
   permitirRoles('gerente'),
@@ -194,6 +208,24 @@ app.post('/api/cursos',
       () => res.json({ mensaje:'Curso creado' })
     );
 });
+
+app.put('/api/cursos/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const { nombre, descripcion, precio } = req.body;
+    if (!nombre || precio === undefined) return res.status(400).json({ mensaje: 'Nombre y precio son obligatorios' });
+    db.run(
+      'UPDATE cursos SET nombre=?, descripcion=?, precio=? WHERE id=?',
+      [nombre, descripcion || null, precio, id],
+      function(err) {
+        if (err) return res.status(500).json({ mensaje: 'Error al actualizar' });
+        if (this.changes === 0) return res.status(404).json({ mensaje: 'Curso no encontrado' });
+        res.json({ mensaje: 'Curso actualizado' });
+      }
+    );
+  });
 
 app.delete('/api/cursos/:id',
   verificarToken,
@@ -1139,7 +1171,7 @@ app.get('/api/estudiantes/buscar',
 
 
 /* =====================================================
-   SUBIR CERTIFICADOS (PDF)
+   SUBIR CERTIFICADOS (PDF) – solo para validador, sin estudiantes
 ===================================================== */
 app.post('/api/certificados',
   verificarToken,
@@ -1158,97 +1190,33 @@ app.post('/api/certificados',
     }
 
     const rutaPdf = `/uploads/certificados/${req.file.filename}`;
-    const fechaEmision = fecha_diploma || new Date().toISOString().slice(0,10);
+    const fechaEmision = (fecha_diploma || '').trim() || new Date().toISOString().slice(0,10);
 
-    db.serialize(() => {
-
-      // 1️⃣ Buscar o crear estudiante por cédula
-      db.get(
-        'SELECT id FROM estudiantes WHERE cedula=?',
-        [cedula],
-        (err, est) => {
-          if(err){
-            return res.status(500).json({ mensaje:'Error buscando estudiante' });
-          }
-
-          const continuarConEstudiante = (estudianteId) => {
-
-            // 2️⃣ Buscar o crear curso por nombre
-            db.get(
-              'SELECT id FROM cursos WHERE nombre=?',
-              [curso],
-              (err2, c) => {
-                if(err2){
-                  return res.status(500).json({ mensaje:'Error buscando curso' });
-                }
-
-                const continuarConCurso = (cursoId) => {
-
-                  // 3️⃣ Registrar certificado (compatibilidad con tabla existente)
-                  db.run(`
-                    INSERT INTO certificados
-                    (estudiante_id, cedula, nombre, curso, fecha_diploma, tipo, archivo_pdf, fecha_subida, curso_id, fecha_emision)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)
-                  `,
-                  [
-                    estudianteId,
-                    cedula,
-                    nombre || cedula,
-                    curso,
-                    fechaEmision,
-                    'nuevo',
-                    rutaPdf,
-                    new Date().toISOString(),
-                    cursoId,
-                    fechaEmision
-                  ],
-                  err3 => {
-                    if(err3){
-                      console.error('Error insertando certificado:', err3.message);
-                      return res.status(500).json({ mensaje:'Error guardando certificado: ' + err3.message });
-                    }
-                    res.json({ mensaje:'Certificado subido correctamente' });
-                  });
-                };
-
-                if(c){
-                  continuarConCurso(c.id);
-                } else {
-                  db.run(
-                    'INSERT INTO cursos (nombre, descripcion, precio) VALUES (?,?,?)',
-                    [curso, null, 0],
-                    function(errCreateCurso){
-                      if(errCreateCurso){
-                        return res.status(500).json({ mensaje:'Error creando curso' });
-                      }
-                      continuarConCurso(this.lastID);
-                    }
-                  );
-                }
-              }
-            );
-          };
-
-          if(est){
-            continuarConEstudiante(est.id);
-          } else {
-            db.run(`
-              INSERT INTO estudiantes
-              (nombre, cedula, telefono, ciudad, direccion, estado, foto)
-              VALUES (?,?,?,?,?,?,?)
-            `,
-            [nombre || cedula, cedula, '', '', '', 'activo', null],
-            function(errCreateEst){
-              if(errCreateEst){
-                return res.status(500).json({ mensaje:'Error creando estudiante' });
-              }
-              continuarConEstudiante(this.lastID);
-            });
-          }
+    db.run(
+      `INSERT INTO certificados
+       (estudiante_id, cedula, nombre, curso, fecha_diploma, tipo, archivo_pdf, fecha_subida, curso_id, fecha_emision)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [
+        null,
+        cedula.trim(),
+        (nombre || cedula).toString().trim(),
+        curso.toString().trim(),
+        fechaEmision,
+        'nuevo',
+        rutaPdf,
+        new Date().toISOString(),
+        null,
+        fechaEmision
+      ],
+      function(err) {
+        if (err) {
+          console.error('Error insertando certificado:', err.message);
+          return res.status(500).json({ mensaje: 'Error guardando certificado' });
         }
-      );
-    });
-});
+        res.json({ mensaje: 'Certificado subido correctamente. Solo visible en Validador.' });
+      }
+    );
+  });
 
 
 /* =====================================================
@@ -1257,17 +1225,15 @@ app.post('/api/certificados',
 app.get('/api/validar/:cedula', (req, res) => {
   db.all(`
     SELECT 
-      e.nombre,
-      c.nombre AS curso,
+      cert.nombre,
+      cert.curso,
       cert.archivo_pdf,
       cert.fecha_emision AS fecha_diploma
     FROM certificados cert
-    JOIN estudiantes e ON e.id = cert.estudiante_id
-    JOIN cursos c ON c.id = cert.curso_id
-    WHERE e.cedula = ?
+    WHERE cert.cedula = ?
     ORDER BY cert.fecha_emision DESC
   `,
-  [req.params.cedula],
+  [req.params.cedula.trim()],
   (_, certs) => {
     if(!certs || certs.length === 0){
       return res.json({ valido:false });

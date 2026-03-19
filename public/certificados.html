@@ -27,6 +27,7 @@ fetch('/layout.html')
   document.getElementById('app').innerHTML = html;
   document.querySelector('.content').innerHTML = `
     <h3 class="mb-4">📄 Subir Certificados</h3>
+    <p class="text-muted mb-3">Los certificados se suben solo aquí y se consultan en <a href="/validar">Validar</a> por cédula. No se vinculan a la ficha del estudiante.</p>
 
     <div class="card shadow-sm">
       <div class="card-body">

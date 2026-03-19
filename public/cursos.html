@@ -19,6 +19,7 @@ if(!localStorage.getItem('token')){
 
 <script>
 const token = localStorage.getItem('token');
+let cursoEditId = null;
 
 fetch('/layout.html')
   .then(r => r.text())
@@ -42,8 +43,11 @@ fetch('/layout.html')
               <input id="descripcion" class="form-control" placeholder="Descripción del curso">
             </div>
           </div>
-          <button class="btn btn-primary w-100 mt-3" onclick="crearCurso()">
+          <button class="btn btn-primary mt-3 me-2" id="btnGuardarCurso" onclick="crearCurso()">
             Guardar curso
+          </button>
+          <button class="btn btn-outline-secondary mt-3 d-none" id="btnCancelarEditar" onclick="cancelarEditar()">
+            Cancelar
           </button>
         </div>
       </div>
@@ -87,6 +91,9 @@ async function cargarCursos(){
         </td>
         <td>${typeof formatCOP === 'function' ? formatCOP(c.precio) : '$' + Number(c.precio).toLocaleString('es-CO') + ' COP'}</td>
         <td>
+          <button class="btn btn-outline-primary btn-sm me-1" onclick="editarCurso(${c.id})">
+            Editar
+          </button>
           <button class="btn btn-danger btn-sm" onclick="eliminarCurso(${c.id})">
             Eliminar
           </button>
@@ -96,8 +103,55 @@ async function cargarCursos(){
   });
 }
 
+async function editarCurso(id){
+  const res = await fetch('/api/cursos/' + id, { headers: { Authorization: 'Bearer ' + token } });
+  const c = await res.json();
+  if (!res.ok) { alert(c.mensaje || 'Curso no encontrado'); return; }
+  cursoEditId = id;
+  document.getElementById('nombre').value = c.nombre || '';
+  document.getElementById('precio').value = c.precio ?? '';
+  document.getElementById('descripcion').value = c.descripcion || '';
+  document.getElementById('btnGuardarCurso').textContent = 'Actualizar curso';
+  document.getElementById('btnGuardarCurso').setAttribute('onclick', 'actualizarCurso()');
+  document.getElementById('btnCancelarEditar').classList.remove('d-none');
+}
+
+function cancelarEditar(){
+  cursoEditId = null;
+  document.getElementById('nombre').value = '';
+  document.getElementById('precio').value = '';
+  document.getElementById('descripcion').value = '';
+  document.getElementById('btnGuardarCurso').textContent = 'Guardar curso';
+  document.getElementById('btnGuardarCurso').setAttribute('onclick', 'crearCurso()');
+  document.getElementById('btnCancelarEditar').classList.add('d-none');
+}
+
+async function actualizarCurso(){
+  const nombreEl = document.getElementById('nombre');
+  const precioEl = document.getElementById('precio');
+  const descripcionEl = document.getElementById('descripcion');
+  if (!cursoEditId || !nombreEl.value.trim() || !precioEl.value) {
+    alert('Nombre y precio son obligatorios');
+    return;
+  }
+  await fetch('/api/cursos/' + cursoEditId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({
+      nombre: nombreEl.value.trim(),
+      descripcion: descripcionEl.value.trim() || null,
+      precio: precioEl.value
+    })
+  });
+  cancelarEditar();
+  cargarCursos();
+}
+
 async function crearCurso(){
-  if(!nombre.value || !precio.value){
+  const nombreEl = document.getElementById('nombre');
+  const precioEl = document.getElementById('precio');
+  const descripcionEl = document.getElementById('descripcion');
+  if(!nombreEl.value.trim() || !precioEl.value){
     alert('Nombre y precio son obligatorios');
     return;
   }
@@ -109,15 +163,15 @@ async function crearCurso(){
       'Authorization':'Bearer '+token
     },
     body: JSON.stringify({
-      nombre: nombre.value,
-      descripcion: descripcion.value,
-      precio: precio.value
+      nombre: nombreEl.value.trim(),
+      descripcion: descripcionEl.value.trim() || null,
+      precio: precioEl.value
     })
   });
 
-  nombre.value = '';
-  descripcion.value = '';
-  precio.value = '';
+  nombreEl.value = '';
+  descripcionEl.value = '';
+  precioEl.value = '';
   cargarCursos();
 }
 
