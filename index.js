@@ -763,6 +763,45 @@ app.get('/api/auditoria',
   });
 
 /* =====================================================
+   EDITAR / ELIMINAR AUDITORÍA (SOLO GERENTE)
+   Nota: para "editar" se permite ajustar solo "detalles".
+===================================================== */
+app.put('/api/auditoria/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const { detalles } = req.body;
+    const nuevoDetalles = (detalles === undefined || detalles === null) ? '' : String(detalles);
+
+    db.run(
+      'UPDATE auditoria SET detalles=? WHERE id=?',
+      [nuevoDetalles, id],
+      function() {
+        if (this.changes === 0) return res.status(404).json({ mensaje: 'Registro no encontrado' });
+        res.json({ mensaje: 'Auditoría actualizada' });
+      }
+    );
+  }
+);
+
+app.delete('/api/auditoria/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    db.run(
+      'DELETE FROM auditoria WHERE id=?',
+      [id],
+      function() {
+        if (this.changes === 0) return res.status(404).json({ mensaje: 'Registro no encontrado' });
+        res.json({ mensaje: 'Auditoría eliminada' });
+      }
+    );
+  }
+);
+
+/* =====================================================
    NÓMINA / COMISIONES (SOLO GERENTE)
 ===================================================== */
 app.get('/api/nomina/config',

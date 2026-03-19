@@ -41,11 +41,13 @@ fetch('/layout.html')
               <th>Tabla</th>
               <th>ID</th>
               <th>Detalles</th>
+              <th style="width:110px">Editar</th>
+              <th style="width:130px">Eliminar</th>
             </tr>
           </thead>
           <tbody id="tablaAuditoria">
             <tr>
-              <td colspan="7" class="text-center">Cargando...</td>
+              <td colspan="9" class="text-center">Cargando...</td>
             </tr>
           </tbody>
         </table>
@@ -67,7 +69,7 @@ async function cargarAuditoria(){
   if(!res.ok || !data.length){
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-muted">
+        <td colspan="9" class="text-center text-muted">
           ${!res.ok ? 'No autorizado o error.' : 'No hay registros de auditoría.'}
         </td>
       </tr>
@@ -79,14 +81,20 @@ async function cargarAuditoria(){
     const detalles = (a.detalles || '').toString();
     const detallesCorto = detalles.length > 80 ? detalles.substring(0, 80) + '…' : detalles;
     return `
-      <tr>
+      <tr data-aud-id="${a.id}">
         <td>${(a.creado_en || '').replace('T',' ')}</td>
         <td>${escapeHtml(a.usuario_nombre || '-')}</td>
         <td>${escapeHtml(a.rol || '-')}</td>
         <td>${escapeHtml(a.accion || '-')}</td>
         <td>${escapeHtml(a.tabla_afectada || '-')}</td>
         <td>${a.registro_id != null ? a.registro_id : '-'}</td>
-        <td class="small text-break" title="${escapeHtml(detalles)}">${escapeHtml(detallesCorto) || '-'}</td>
+        <td class="small text-break" title="${escapeHtml(detalles)}" data-detalles="${escapeHtml(detalles)}">${escapeHtml(detallesCorto) || '-'}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-secondary" onclick="editarAuditoria(${a.id})">Editar</button>
+        </td>
+        <td>
+          <button class="btn btn-sm btn-outline-danger" onclick="eliminarAuditoria(${a.id})">Eliminar</button>
+        </td>
       </tr>
     `;
   }).join('');
@@ -97,6 +105,51 @@ function escapeHtml(s){
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
+}
+
+async function editarAuditoria(id){
+  const tr = document.querySelector(`tr[data-aud-id="${id}"]`);
+  const cell = tr ? tr.querySelector('[data-detalles]') : null;
+  const actuales = cell ? (cell.getAttribute('data-detalles') || '') : '';
+
+  const nuevo = prompt('Editar detalles de auditoría (solo texto):', actuales);
+  if(nuevo === null) return;
+
+  const res = await fetch('/api/auditoria/' + id, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token
+    },
+    body: JSON.stringify({ detalles: nuevo })
+  });
+
+  const data = await res.json();
+  if(!res.ok){
+    alert(data.mensaje || 'Error actualizando');
+    return;
+  }
+
+  alert(data.mensaje || 'Auditoría actualizada');
+  cargarAuditoria();
+}
+
+async function eliminarAuditoria(id){
+  if(!confirm('¿Eliminar este registro de auditoría?')) return;
+
+  const res = await fetch('/api/auditoria/' + id, {
+    method: 'DELETE',
+    headers: { Authorization: 'Bearer ' + token }
+  });
+
+  const data = await res.json();
+  if(!res.ok){
+    alert(data.mensaje || 'Error eliminando');
+    return;
+  }
+
+  alert(data.mensaje || 'Auditoría eliminada');
+  cargarAuditoria();
 }
 </script>
 </body>
