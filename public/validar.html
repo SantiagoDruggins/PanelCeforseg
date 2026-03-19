@@ -250,6 +250,30 @@ async function validar(){
   const nombre = escapeHtml(data.estudiante?.nombre || '-');
   const certificados = data.certificados || [];
 
+  const esModerno = (c) => {
+    const f = c.fecha_diploma ? new Date(c.fecha_diploma) : null;
+    return !!(f && !isNaN(f.getTime()) && f.getFullYear() >= 2025);
+  };
+
+  const modernos = certificados.filter(esModerno);
+  const anteriores = certificados.filter(c => !esModerno(c));
+
+  const filas = (lista) => lista.map(c => {
+    const fecha = c.fecha_diploma ? escapeHtml(c.fecha_diploma) : '-';
+    const curso = c.curso ? escapeHtml(c.curso) : '-';
+    const pdf = c.archivo_pdf ? escapeHtml(c.archivo_pdf) : '';
+
+    return `
+      <tr>
+        <td>${curso}</td>
+        <td>${fecha}</td>
+        <td>
+          ${pdf ? `<a href=\"${pdf}\" target=\"_blank\" class=\"pdf\">Abrir PDF</a>` : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
   cont.innerHTML = `
     <div class="success">
       Certificados válidos para <b>${nombre}</b>
@@ -258,31 +282,44 @@ async function validar(){
       </span>
     </div>
 
-    <table style="margin-top:18px;">
-      <thead>
-        <tr>
-          <th>Curso</th>
-          <th>Fecha</th>
-          <th>PDF</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${certificados.map(c => {
-          const fecha = c.fecha_diploma ? escapeHtml(c.fecha_diploma) : '-';
-          const curso = c.curso ? escapeHtml(c.curso) : '-';
-          const pdf = c.archivo_pdf ? escapeHtml(c.archivo_pdf) : '';
-          return `
-            <tr>
-              <td>${curso}</td>
-              <td>${fecha}</td>
-              <td>
-                ${pdf ? `<a href=\"${pdf}\" target=\"_blank\" class=\"pdf\">Abrir PDF</a>` : '-'}
-              </td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
+    ${modernos.length ? `
+      <div style="margin-top:18px; font-weight:800; color:var(--azul-institucional); text-align:left;">
+        Certificados con PDF (2025 en adelante)
+      </div>
+      <table style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>Curso</th>
+            <th>Fecha</th>
+            <th>PDF</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filas(modernos)}
+        </tbody>
+      </table>
+    ` : ''}
+
+    ${anteriores.length ? `
+      <div style="margin-top:18px; font-weight:800; color:var(--azul-institucional); text-align:left;">
+        Certificados emitidos antes de 2025
+      </div>
+      <div style="margin-top:8px; color:#475569; font-weight:500; text-align:left;">
+        Estos certificados se encuentran registrados en el sistema, pero para esta fecha no hay PDF adjunto disponible para descargar.
+      </div>
+      <table style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>Curso</th>
+            <th>Fecha</th>
+            <th>PDF</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filas(anteriores)}
+        </tbody>
+      </table>
+    ` : ''}
   `;
 }
 </script>

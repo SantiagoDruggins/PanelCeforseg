@@ -1185,11 +1185,7 @@ app.post('/api/certificados',
       return res.status(400).json({ mensaje:'Cédula y curso son obligatorios' });
     }
 
-    if(!req.file){
-      return res.status(400).json({ mensaje:'Debe adjuntar un archivo PDF' });
-    }
-
-    const rutaPdf = `/uploads/certificados/${req.file.filename}`;
+    const rutaPdf = req.file ? `/uploads/certificados/${req.file.filename}` : null;
     const fechaEmision = (fecha_diploma || '').trim() || new Date().toISOString().slice(0,10);
 
     db.run(
