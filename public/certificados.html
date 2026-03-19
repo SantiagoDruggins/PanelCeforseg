@@ -20,6 +20,8 @@ if(!localStorage.getItem('token')){
 
 <script>
 const token = localStorage.getItem('token');
+let editId = null;
+let ultimaLista = [];
 
 fetch('/layout.html')
 .then(r=>r.text())
@@ -63,11 +65,50 @@ fetch('/layout.html')
 
           </div>
 
-          <button class="btn btn-primary w-100 mt-4">
+          <button class="btn btn-primary w-100 mt-4" id="btnSubmitCert">
             ⬆ Subir certificado
           </button>
 
+          <button id="btnCancelarCert" type="button" class="btn btn-outline-secondary w-100 mt-2 d-none" onclick="cancelarEdit()">
+            Cancelar edición
+          </button>
+
         </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Buscar certificados</label>
+            <input id="qCert" class="form-control" placeholder="Cédula o nombre del estudiante">
+          </div>
+          <div class="col-md-3 d-grid">
+            <button class="btn btn-primary" onclick="buscarCertificados()">Buscar</button>
+          </div>
+          <div class="col-md-3 d-grid">
+            <button class="btn btn-outline-secondary" onclick="limpiarBusqueda()">Limpiar</button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Cédula</th>
+                <th>Nombre</th>
+                <th>Curso</th>
+                <th>Fecha</th>
+                <th>PDF</th>
+                <th style="width:180px">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaCertificados">
+              <tr><td colspan="6" class="text-center text-muted">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
@@ -75,22 +116,129 @@ fetch('/layout.html')
 });
 
 function init(){
+  editId = null;
+  ultimaLista = [];
+
   document.getElementById('formCert').addEventListener('submit', async e=>{
     e.preventDefault();
 
     const formData = new FormData(e.target);
 
-    const res = await fetch('/api/certificados',{
-      method:'POST',
+    const url = editId ? ('/api/certificados/' + editId) : '/api/certificados';
+    const method = editId ? 'PUT' : 'POST';
+
+    const res = await fetch(url,{
+      method,
       headers:{ Authorization:'Bearer '+token },
       body: formData
     });
 
     const data = await res.json();
-    alert(data.mensaje || 'Certificado subido');
+    if(!res.ok){
+      alert(data.mensaje || 'Error al guardar');
+      return;
+    }
 
+    alert(data.mensaje || (editId ? 'Certificado actualizado' : 'Certificado subido'));
+
+    editId = null;
+    document.getElementById('btnSubmitCert').textContent = '⬆ Subir certificado';
+    document.getElementById('btnCancelarCert').classList.add('d-none');
     e.target.reset();
+    buscarCertificados();
   });
+
+  // Cargar lista inicial
+  buscarCertificados();
+}
+
+async function buscarCertificados(){
+  const q = (document.getElementById('qCert').value || '').trim();
+  const url = q ? ('/api/certificados/buscar?q=' + encodeURIComponent(q)) : '/api/certificados/buscar';
+
+  const res = await fetch(url, { headers:{ Authorization:'Bearer '+token } });
+  const data = await res.json();
+  if(!res.ok){
+    alert(data.mensaje || 'Error cargando certificados');
+    return;
+  }
+
+  ultimaLista = data || [];
+  const tbody = document.getElementById('tablaCertificados');
+  tbody.innerHTML = ultimaLista.length === 0
+    ? '<tr><td colspan="6" class="text-center text-muted">No hay certificados</td></tr>'
+    : ultimaLista.map(c => {
+        const pdf = c.archivo_pdf
+          ? `<a href="${c.archivo_pdf}" target="_blank" class="btn btn-sm btn-outline-primary">PDF</a>`
+          : '<span class="text-muted">Sin PDF</span>';
+        return `
+          <tr>
+            <td>${escapeHtml(c.cedula || '')}</td>
+            <td>${escapeHtml(c.nombre || '')}</td>
+            <td>${escapeHtml(c.curso || '')}</td>
+            <td>${escapeHtml((c.fecha_diploma || '').toString())}</td>
+            <td>${pdf}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-secondary me-1" onclick="editarCert(${c.id})">Editar</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="eliminarCert(${c.id})">Eliminar</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+}
+
+function limpiarBusqueda(){
+  document.getElementById('qCert').value = '';
+  buscarCertificados();
+}
+
+function editarCert(id){
+  const c = (ultimaLista || []).find(x => String(x.id) === String(id));
+  if(!c) return;
+
+  editId = c.id;
+
+  document.querySelector('#formCert input[name="cedula"]').value = c.cedula || '';
+  document.querySelector('#formCert input[name="nombre"]').value = c.nombre || '';
+  document.querySelector('#formCert input[name="curso"]').value = c.curso || '';
+  document.querySelector('#formCert input[name="fecha_diploma"]').value = (c.fecha_diploma || '').toString().slice(0,10);
+
+  document.getElementById('btnSubmitCert').textContent = 'Actualizar certificado';
+  document.getElementById('btnCancelarCert').classList.remove('d-none');
+  document.getElementById('formCert').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function cancelarEdit(){
+  editId = null;
+  document.getElementById('btnSubmitCert').textContent = '⬆ Subir certificado';
+  document.getElementById('btnCancelarCert').classList.add('d-none');
+  document.getElementById('formCert').reset();
+}
+
+async function eliminarCert(id){
+  if(!confirm('¿Eliminar este certificado?')) return;
+  const res = await fetch('/api/certificados/' + id, {
+    method:'DELETE',
+    headers:{ Authorization:'Bearer '+token }
+  });
+  const data = await res.json();
+  if(!res.ok){
+    alert(data.mensaje || 'Error eliminando');
+    return;
+  }
+  alert(data.mensaje || 'Certificado eliminado');
+  buscarCertificados();
+}
+
+function escapeHtml(s){
+  if(s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, m => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#039;'
+  }[m]));
 }
 </script>
 

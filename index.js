@@ -1214,6 +1214,116 @@ app.post('/api/certificados',
     );
   });
 
+/* =====================================================
+   CERTIFICADOS (GESTION) – panel admin/secretaria
+===================================================== */
+app.get('/api/certificados/buscar',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    const q = (req.query.q || '').trim();
+    const params = [];
+
+    let sql = `
+      SELECT
+        id,
+        cedula,
+        nombre,
+        curso,
+        fecha_diploma,
+        archivo_pdf,
+        fecha_subida
+      FROM certificados
+    `;
+
+    if(q){
+      sql += `
+        WHERE cedula LIKE ?
+           OR nombre LIKE ?
+           OR curso LIKE ?
+      `;
+      const like = '%' + q + '%';
+      params.push(like, like, like);
+    }
+
+    sql += `
+      ORDER BY fecha_subida DESC
+      LIMIT 100
+    `;
+
+    db.all(sql, params, (_, rows) => {
+      res.json(rows || []);
+    });
+  }
+);
+
+app.put('/api/certificados/:id',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  uploadCert.single('pdf'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const { cedula, nombre, curso, fecha_diploma } = req.body;
+
+    if(!cedula || !curso){
+      return res.status(400).json({ mensaje:'Cédula y curso son obligatorios' });
+    }
+
+    const fechaEmision = (fecha_diploma || '').trim() || new Date().toISOString().slice(0,10);
+
+    db.get('SELECT archivo_pdf FROM certificados WHERE id=?', [id], (err, row) => {
+      if(err) return res.status(500).json({ mensaje:'Error buscando certificado' });
+      if(!row) return res.status(404).json({ mensaje:'Certificado no encontrado' });
+
+      const nuevoPdf = req.file ? `/uploads/certificados/${req.file.filename}` : row.archivo_pdf;
+
+      db.run(`
+        UPDATE certificados
+        SET cedula=?,
+            nombre=?,
+            curso=?,
+            fecha_diploma=?,
+            archivo_pdf=?,
+            fecha_emision=?
+        WHERE id=?
+      `, [cedula.trim(), (nombre || cedula).toString().trim(), curso.toString().trim(), fechaEmision, nuevoPdf, fechaEmision, id],
+      function(updateErr){
+        if(updateErr) return res.status(500).json({ mensaje:'Error actualizando certificado' });
+        if(this.changes === 0) return res.status(404).json({ mensaje:'Certificado no encontrado' });
+        res.json({ mensaje:'Certificado actualizado' });
+      });
+    });
+  }
+);
+
+app.delete('/api/certificados/:id',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+
+    db.get('SELECT archivo_pdf FROM certificados WHERE id=?', [id], (err, row) => {
+      if(err) return res.status(500).json({ mensaje:'Error buscando certificado' });
+      if(!row) return res.status(404).json({ mensaje:'Certificado no encontrado' });
+
+      db.run('DELETE FROM certificados WHERE id=?', [id], function(delErr){
+        if(delErr) return res.status(500).json({ mensaje:'Error eliminando certificado' });
+        if(this.changes === 0) return res.status(404).json({ mensaje:'Certificado no encontrado' });
+
+        try{
+          if(row.archivo_pdf){
+            const fileName = path.basename(row.archivo_pdf);
+            const filePath = path.join(CERT_DIR, fileName);
+            if(fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          }
+        }catch(_e){}
+
+        res.json({ mensaje:'Certificado eliminado' });
+      });
+    });
+  }
+);
+
 
 /* =====================================================
    VALIDAR CERTIFICADOS
