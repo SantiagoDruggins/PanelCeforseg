@@ -17,8 +17,11 @@
 body{
   margin:0;
   min-height:100vh;
-  background:transparent;
-  display:block;
+  background:linear-gradient(135deg,var(--azul-institucional),var(--azul-oscuro));
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px 16px;
 }
 
 .card{
@@ -139,9 +142,7 @@ tbody tr:nth-child(even){
 <div id="app"></div>
 
 <script>
-if(!localStorage.getItem('token')) location.href='/login';
-
-const token = localStorage.getItem('token');
+// Página pública (sin layout del panel). Valida certificados por cédula.
 
 function escapeHtml(s){
   if(s === null || s === undefined) return '';
@@ -154,30 +155,23 @@ function escapeHtml(s){
   }[m]));
 }
 
-fetch('/layout.html')
-  .then(r => r.text())
-  .then(html => {
-    document.getElementById('app').innerHTML = html;
-    const content = document.querySelector('.content');
+document.getElementById('app').innerHTML = `
+  <div class="card">
+    <h2>🔎 Validar Certificados</h2>
+    <div class="subtitle">Ingrese la cédula del estudiante para consultar</div>
 
-    content.innerHTML = `
-      <div class="card" style="margin:0 auto; max-width:1100px;">
-        <h2>🔎 Validar Certificados</h2>
-        <div class="subtitle">Ingrese la cédula del estudiante para consultar</div>
+    <div class="search">
+      <input id="cedula" placeholder="Número de cédula" inputmode="numeric">
+      <button onclick="validar()" id="btnValidar">Validar</button>
+    </div>
 
-        <div class="search">
-          <input id="cedula" placeholder="Número de cédula" inputmode="numeric">
-          <button onclick="validar()" id="btnValidar">Validar</button>
-        </div>
+    <div id="resultado"></div>
 
-        <div id="resultado" class="mt-4"></div>
-
-        <div class="footer">
-          <a href="/dashboard">Volver al panel</a>
-        </div>
-      </div>
-    `;
-  });
+    <div class="footer">
+      <a href="/login">Inicio</a>
+    </div>
+  </div>
+`;
 
 async function validar(){
   const cedula = (document.getElementById('cedula').value || '').trim();
