@@ -27,10 +27,12 @@ body{
 .card{
   width:100%;
   max-width:1000px;
-  background:#fff;
-  border-radius:22px;
-  padding:40px;
-  box-shadow:0 40px 80px rgba(0,0,0,.3);
+  background:rgba(255,255,255,.92);
+  border-radius:18px;
+  padding:34px;
+  box-shadow:0 18px 45px rgba(2,6,23,.22);
+  border:1px solid rgba(255,255,255,.55);
+  backdrop-filter: blur(6px);
 }
 
 .brand{
@@ -61,8 +63,16 @@ h2{
 .subtitle{
   text-align:center;
   color:#475569;
-  margin-bottom:0;
+  margin:0;
   font-weight:500;
+}
+
+.brand h2{
+  font-size:22px;
+}
+
+.logo-wrap{
+  box-shadow:0 14px 30px rgba(2,6,23,.12);
 }
 
 .search{
@@ -74,7 +84,7 @@ h2{
   flex:1;
   padding:18px;
   font-size:16px;
-  border-radius:16px;
+  border-radius:14px;
   border:1px solid #cbd5e1;
   background:#eef4ff;
 }
@@ -82,21 +92,36 @@ h2{
 .search button{
   padding:18px 34px;
   border:none;
-  border-radius:16px;
+  border-radius:14px;
   background:var(--azul-institucional);
   color:#fff;
   font-weight:600;
   cursor:pointer;
+  box-shadow:0 10px 22px rgba(10,59,120,.22);
+  transition: transform .12s ease, box-shadow .12s ease, background-color .12s ease;
 }
 
 .search button:hover{background:var(--azul-oscuro)}
+.search button:hover{
+  transform: translateY(-1px);
+  box-shadow:0 14px 28px rgba(6,47,92,.26);
+}
 
 #resultado{margin-top:32px}
+
+.fade-in{
+  animation: fadeInUp .2s ease both;
+}
+
+@keyframes fadeInUp{
+  from{ opacity:0; transform: translateY(6px); }
+  to{ opacity:1; transform: translateY(0); }
+}
 
 .success{
   background:#eff6ff;
   border:1px solid var(--azul-institucional);
-  padding:18px;
+  padding:16px 18px;
   border-radius:16px;
   color:var(--azul-institucional);
   margin-bottom:22px;
@@ -109,7 +134,7 @@ h2{
 .error{
   background:#fef2f2;
   border:1px solid #ef4444;
-  padding:18px;
+  padding:16px 18px;
   border-radius:16px;
   color:#991b1b;
   margin-bottom:22px;
@@ -119,7 +144,7 @@ h2{
 table{
   width:100%;
   border-collapse:collapse;
-  border-radius:16px;
+  border-radius:14px;
   overflow:hidden;
 }
 
@@ -129,13 +154,17 @@ thead{
 }
 
 th,td{
-  padding:16px;
+  padding:14px 12px;
   font-size:15px;
   text-align:center;
 }
 
 tbody tr:nth-child(even){
   background:#f8fafc;
+}
+
+tbody tr:hover{
+  background:#eaf1ff;
 }
 
 .pdf{
@@ -233,6 +262,9 @@ async function validar(){
   if(!cedula) return;
 
   const cont = document.getElementById('resultado');
+  cont.classList.remove('fade-in');
+  void cont.offsetWidth; // reflow para reiniciar animación
+  cont.classList.add('fade-in');
   cont.innerHTML = `
     <div class="success">
       Validando cédula...
