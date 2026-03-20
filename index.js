@@ -403,6 +403,16 @@ const uploadDiplomaTemplate = multer({
   })
 });
 
+const DIPLOMA_FOTO_DIR = path.join(__dirname, 'public/uploads/diplomas/fotos');
+fs.mkdirSync(DIPLOMA_FOTO_DIR, { recursive: true });
+
+const uploadDiplomaPhoto = multer({
+  storage: multer.diskStorage({
+    destination: DIPLOMA_FOTO_DIR,
+    filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname)
+  })
+});
+
 app.post('/api/diplomas/plantillas',
   verificarToken,
   permitirRoles('gerente'),
@@ -412,6 +422,19 @@ app.post('/api/diplomas/plantillas',
       return res.status(400).json({ mensaje:'Debe adjuntar un PDF de plantilla' });
     }
     const url = `/uploads/diplomas/plantillas/${req.file.filename}`;
+    res.json({ url });
+  }
+);
+
+app.post('/api/diplomas/fotos',
+  verificarToken,
+  permitirRoles('gerente'),
+  uploadDiplomaPhoto.single('foto'),
+  (req, res) => {
+    if(!req.file){
+      return res.status(400).json({ mensaje:'Debe adjuntar una foto' });
+    }
+    const url = `/uploads/diplomas/fotos/${req.file.filename}`;
     res.json({ url });
   }
 );
