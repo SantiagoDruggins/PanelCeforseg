@@ -92,12 +92,53 @@
 
     .no-print{ }
     @media print {
+      /* Solo diploma: ocultar panel lateral (layout) y formularios */
+      aside.sidebar,
+      .sidebar{
+        display:none !important;
+      }
+      .app{
+        display:block !important;
+        min-height:0 !important;
+      }
+      .content{
+        padding:0 !important;
+        margin:0 !important;
+        background:#fff !important;
+        width:100% !important;
+        max-width:100% !important;
+      }
       .no-print{ display:none !important; }
-      body{ background:#fff !important; }
+      body{
+        background:#fff !important;
+        margin:0 !important;
+      }
+      #app{ margin:0 !important; padding:0 !important; }
+      .vf-wrap{
+        border:none !important;
+        box-shadow:none !important;
+        background:transparent !important;
+        margin:0 !important;
+      }
+      .card-body{ padding:0 !important; }
+      .row{ margin:0 !important; }
+      .col-lg-7.dp-print-col{
+        width:100% !important;
+        max-width:100% !important;
+        flex:0 0 100% !important;
+        padding:0 !important;
+      }
       .dp-preview-wrap{
         box-shadow:none !important;
         border-radius:0 !important;
         width:210mm !important;
+        max-width:100% !important;
+        margin:0 auto !important;
+        page-break-inside:avoid;
+      }
+      @page{
+        size:A4;
+        margin:10mm;
       }
     }
   </style>
@@ -183,7 +224,7 @@
       <div class="row g-3">
         <div class="col-12">
           <div class="vf-wrap mb-4" style="background:rgba(255,255,255,.85);">
-            <div class="vf-header">
+            <div class="vf-header no-print">
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
                   <h5 class="vf-title mb-1">Generador de Diplomas (PDF)</h5>
@@ -192,7 +233,7 @@
               </div>
             </div>
             <div class="card-body">
-              <div class="row g-3 align-items-end">
+              <div class="row g-3 align-items-end no-print">
                 <div class="col-md-6">
                   <label class="form-label fw-bold">Plantilla PDF</label>
                   <input class="form-control" id="tplFile" type="file" accept="application/pdf">
@@ -222,10 +263,10 @@
                 </div>
               </div>
 
-              <hr class="my-3">
+              <hr class="my-3 no-print">
 
               <div class="row g-3">
-                <div class="col-lg-5">
+                <div class="col-lg-5 no-print">
                   <div class="no-print">
                     <div class="d-flex gap-2 flex-wrap dp-btn-row mb-2">
                       <button class="btn btn-outline-primary" onclick="toggleAjustePos()" type="button" id="btnAjustePos">
@@ -360,12 +401,12 @@
                   </div>
                 </div>
 
-                <div class="col-lg-7">
+                <div class="col-lg-7 dp-print-col">
                   <div class="dp-preview-wrap mt-1" id="previewWrap">
                     <canvas id="pdfCanvas"></canvas>
                     <div class="dp-overlay-layer" id="overlayLayer"></div>
                   </div>
-                  <div id="msgPreview" class="text-muted small mt-2"></div>
+                  <div id="msgPreview" class="text-muted small mt-2 no-print"></div>
                 </div>
               </div>
             </div>
