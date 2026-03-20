@@ -45,6 +45,9 @@ app.get('/cierre-caja', (_, res) =>
 app.get('/ficha-imprimir', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/ficha-imprimir.html'))
 );
+app.get('/diplomas-generador', (_, res) =>
+  res.sendFile(path.join(__dirname, 'public/diplomas-generador.html'))
+);
 
 
 /* =====================================================
@@ -386,6 +389,32 @@ const uploadCert = multer({
     filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname)
   })
 });
+
+/* =====================================================
+   PLANTILLAS DIPLOMAS (SUBIDA PDF)
+===================================================== */
+const DIPLOMA_TPL_DIR = path.join(__dirname, 'public/uploads/diplomas/plantillas');
+fs.mkdirSync(DIPLOMA_TPL_DIR, { recursive: true });
+
+const uploadDiplomaTemplate = multer({
+  storage: multer.diskStorage({
+    destination: DIPLOMA_TPL_DIR,
+    filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname)
+  })
+});
+
+app.post('/api/diplomas/plantillas',
+  verificarToken,
+  permitirRoles('gerente'),
+  uploadDiplomaTemplate.single('pdf'),
+  (req, res) => {
+    if(!req.file){
+      return res.status(400).json({ mensaje:'Debe adjuntar un PDF de plantilla' });
+    }
+    const url = `/uploads/diplomas/plantillas/${req.file.filename}`;
+    res.json({ url });
+  }
+);
 
 /* =====================================================
    DEUDORES / MOROSOS (auditoría para cobros masivos)
