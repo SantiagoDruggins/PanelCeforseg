@@ -293,6 +293,8 @@
                             <div class="small text-muted mb-2">
                               Variables disponibles: {NOMBRE}, {CEDULA}, {CIUDAD}, {CURSO}, {INTERNO}, {RANGO}, {FOLIO}, {HORAS}, {CIUDAD_EXP}, {FECHA_EXP_LARGA}
                             </div>
+                            <label class="form-label fw-bold small mb-1">Frase "Asistió y Aprobó El"</label>
+                            <input id="tpl_texto_aprobo" class="form-control form-control-sm mb-2" value="Asistió y Aprobó El:">
                             <label class="form-label fw-bold small mb-1">Frase cédula</label>
                             <input id="tpl_texto_cedula" class="form-control form-control-sm mb-2" value="Con Cédula de ciudadanía No. {CEDULA}">
                             <label class="form-label fw-bold small mb-1">Frase ciudad</label>
@@ -361,6 +363,7 @@
       nombre:   { x: 18, y: 6,  w: 64, h: 10, align: 'center', fontSize: '18px', fontWeight: 900 },
       cedula:   { x: 28, y: 16, w: 44, h: 6,  align: 'center', fontSize: '13px', fontWeight: 800 },
       ciudad:   { x: 26, y: 22, w: 48, h: 6,  align: 'center', fontSize: '13px', fontWeight: 800 },
+      aprobo:   { x: 26, y: 26.5, w: 48, h: 6, align: 'center', fontSize: '13px', fontWeight: 800 },
       curso:    { x: 8,  y: 30, w: 84, h: 15, align: 'center', fontSize: '28px', fontWeight: 900 },
       interno:  { x: 17, y: 51, w: 55, h: 6,  align: 'left',   fontSize: '14px', fontWeight: 800 },
       rango:    { x: 17, y: 57, w: 55, h: 7,  align: 'left',   fontSize: '14px', fontWeight: 800 },
@@ -373,6 +376,7 @@
       { key:'nombre', input:'in_nombre' },
       { key:'cedula', input:'in_cedula' },
       { key:'ciudad', input:'in_ciudad' },
+      { key:'aprobo', input:null },
       { key:'curso', input:'in_curso' },
       { key:'interno', input:null },
       { key:'rango', input:null },
@@ -421,7 +425,7 @@
       if(!dpi) return;
       aplicarDatos(false);
     };
-    ['in_nombre','in_cedula','in_ciudad','in_curso','in_folio','in_horas','in_ciudad_expedicion','tpl_texto_cedula','tpl_texto_ciudad','tpl_texto_interno','tpl_texto_folio','tpl_texto_horas','tpl_texto_rango','tpl_texto_expedido'].forEach(id => {
+    ['in_nombre','in_cedula','in_ciudad','in_curso','in_folio','in_horas','in_ciudad_expedicion','tpl_texto_aprobo','tpl_texto_cedula','tpl_texto_ciudad','tpl_texto_interno','tpl_texto_folio','tpl_texto_horas','tpl_texto_rango','tpl_texto_expedido'].forEach(id => {
       const el = document.getElementById(id);
       if(el) el.addEventListener('input', applyFromInputs);
     });
@@ -685,6 +689,7 @@
 
     const ciudadExp = document.getElementById('in_ciudad_expedicion')?.value || '';
     const fechaExp = document.getElementById('in_fecha_expedicion')?.value || '';
+    const tplAprobo = document.getElementById('tpl_texto_aprobo')?.value || 'Asistió y Aprobó El:';
     const tplCedula = document.getElementById('tpl_texto_cedula')?.value || 'Con Cédula de ciudadanía No. {CEDULA}';
     const tplCiudad = document.getElementById('tpl_texto_ciudad')?.value || 'De {CIUDAD}.';
     const tplInterno = document.getElementById('tpl_texto_interno')?.value || 'NUMERO INTERNO N.° {INTERNO}';
@@ -720,6 +725,7 @@
     setFieldText('nombre', nombre || '—');
     setFieldText('cedula', cedulaFinal);
     setFieldText('ciudad', ciudadFinal);
+    setFieldText('aprobo', tplAprobo || '—');
     setFieldText('curso', curso || '—');
     setFieldText('interno', internoFinal);
     setFieldText('rango', textoRango || '—');
