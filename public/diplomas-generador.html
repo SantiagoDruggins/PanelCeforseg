@@ -731,6 +731,29 @@
 
   function aplicarDatos(showMsg){
     if(!dpi) return;
+    // Asegura que el tamaño de fuente que elijas se respete también
+    // cuando cambias las "plantillas de texto" (frases).
+    const fontInputMap = {
+      nombre: 'fs_nombre',
+      curso: 'fs_curso',
+      cedula: 'fs_cedula',
+      ciudad: 'fs_ciudad',
+      aprobo: 'fs_aprobo',
+      interno: 'fs_interno',
+      rango: 'fs_rango',
+      folio: 'fs_folio',
+      expedido: 'fs_expedido',
+      horas: 'fs_horas'
+    };
+
+    Object.entries(fontInputMap).forEach(([key, inputId]) => {
+      const input = document.getElementById(inputId);
+      if(!input) return;
+      const v = input.value;
+      if(v === '' || v == null) return;
+      aplicarFontPx(key, v);
+    });
+
     // Interno y rango se derivan de campos de fecha / letra / num
     const internoLetra = (document.getElementById('in_interno_letra')?.value || '').trim();
     const internoNum = (document.getElementById('in_interno_num')?.value || '').trim();
