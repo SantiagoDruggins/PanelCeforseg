@@ -268,6 +268,16 @@
                             <div class="small text-muted mb-2">
                               Variables disponibles: {NOMBRE}, {CEDULA}, {CIUDAD}, {CURSO}, {INTERNO}, {RANGO}, {FOLIO}, {HORAS}, {CIUDAD_EXP}, {FECHA_EXP_LARGA}
                             </div>
+                            <label class="form-label fw-bold small mb-1">Frase cédula</label>
+                            <input id="tpl_texto_cedula" class="form-control form-control-sm mb-2" value="Con Cédula de ciudadanía No. {CEDULA}">
+                            <label class="form-label fw-bold small mb-1">Frase ciudad</label>
+                            <input id="tpl_texto_ciudad" class="form-control form-control-sm mb-2" value="De {CIUDAD}.">
+                            <label class="form-label fw-bold small mb-1">Frase número interno</label>
+                            <input id="tpl_texto_interno" class="form-control form-control-sm mb-2" value="NUMERO INTERNO N.° {INTERNO}">
+                            <label class="form-label fw-bold small mb-1">Frase folio</label>
+                            <input id="tpl_texto_folio" class="form-control form-control-sm mb-2" value="FOLIO N° {FOLIO}">
+                            <label class="form-label fw-bold small mb-1">Frase horas</label>
+                            <input id="tpl_texto_horas" class="form-control form-control-sm mb-2" value="Con una Intensidad teórica práctica de: {HORAS} Horas">
                             <label class="form-label fw-bold small mb-1">Frase de rango / periodo</label>
                             <input id="tpl_texto_rango" class="form-control form-control-sm mb-2" value="{RANGO}">
                             <label class="form-label fw-bold small mb-1">Frase de expedición</label>
@@ -386,7 +396,7 @@
       if(!dpi) return;
       aplicarDatos(false);
     };
-    ['in_nombre','in_cedula','in_ciudad','in_curso','in_folio','in_horas','in_ciudad_expedicion','tpl_texto_rango','tpl_texto_expedido'].forEach(id => {
+    ['in_nombre','in_cedula','in_ciudad','in_curso','in_folio','in_horas','in_ciudad_expedicion','tpl_texto_cedula','tpl_texto_ciudad','tpl_texto_interno','tpl_texto_folio','tpl_texto_horas','tpl_texto_rango','tpl_texto_expedido'].forEach(id => {
       const el = document.getElementById(id);
       if(el) el.addEventListener('input', applyFromInputs);
     });
@@ -650,6 +660,11 @@
 
     const ciudadExp = document.getElementById('in_ciudad_expedicion')?.value || '';
     const fechaExp = document.getElementById('in_fecha_expedicion')?.value || '';
+    const tplCedula = document.getElementById('tpl_texto_cedula')?.value || 'Con Cédula de ciudadanía No. {CEDULA}';
+    const tplCiudad = document.getElementById('tpl_texto_ciudad')?.value || 'De {CIUDAD}.';
+    const tplInterno = document.getElementById('tpl_texto_interno')?.value || 'NUMERO INTERNO N.° {INTERNO}';
+    const tplFolio = document.getElementById('tpl_texto_folio')?.value || 'FOLIO N° {FOLIO}';
+    const tplHoras = document.getElementById('tpl_texto_horas')?.value || 'Con una Intensidad teórica práctica de: {HORAS} Horas';
     const tplRango = document.getElementById('tpl_texto_rango')?.value || '{RANGO}';
     const tplExpedido = document.getElementById('tpl_texto_expedido')?.value || 'Expedido en la ciudad de {CIUDAD_EXP} el {FECHA_EXP_LARGA}';
 
@@ -669,14 +684,13 @@
       CIUDAD_EXP: ciudadExp,
       FECHA_EXP_LARGA: fechaExpLarga
     };
+    const cedulaFinal = aplicarTemplateTexto(tplCedula, vars).trim();
+    const ciudadFinal = aplicarTemplateTexto(tplCiudad, vars).trim();
+    const internoFinal = aplicarTemplateTexto(tplInterno, vars).trim();
+    const folioFinal = aplicarTemplateTexto(tplFolio, vars).trim();
+    const horasFinal = aplicarTemplateTexto(tplHoras, vars).trim();
     const textoRango = aplicarTemplateTexto(tplRango, vars).trim();
     const textoExpedido = aplicarTemplateTexto(tplExpedido, vars).trim();
-
-    const cedulaFinal = cedula ? `Con Cédula de ciudadanía No. ${cedula}` : '—';
-    const ciudadFinal = ciudad ? `De ${ciudad}.` : '—';
-    const internoFinal = internoFull ? `NUMERO INTERNO N.° ${internoFull}` : '—';
-    const folioFinal = folio ? `FOLIO N° ${folio}` : '—';
-    const horasFinal = horas ? `Con una Intensidad teórica práctica de: ${horas} Horas` : '—';
 
     setFieldText('nombre', nombre || '—');
     setFieldText('cedula', cedulaFinal);
