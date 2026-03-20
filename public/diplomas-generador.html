@@ -209,6 +209,17 @@
                     <div id="tplActual" class="fw-bold text-truncate">—</div>
                   </div>
                 </div>
+                <div class="col-12">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkSoloTexto" onchange="actualizarModoSoloTexto()">
+                    <label class="form-check-label fw-bold" for="chkSoloTexto">
+                      Imprimir solo texto (usar diploma preimpreso físico)
+                    </label>
+                  </div>
+                  <div class="form-text">
+                    Activa esta opción para ocultar el PDF de fondo y sacar únicamente los textos variables sobre hoja A4.
+                  </div>
+                </div>
               </div>
 
               <hr class="my-3">
@@ -441,6 +452,7 @@
       dragMode: false,
       templateUrl: null,
       templateKey: '',
+      soloTexto: false,
       msgPos
     };
 
@@ -512,6 +524,7 @@
       });
     }
 
+    actualizarModoSoloTexto();
   }
 
   function applyPosToEl(el, pos){
@@ -603,6 +616,29 @@
 
     wrap.style.height = viewport.height + 'px';
     if(msgPreview) msgPreview.textContent = `Plantilla renderizada (página 1).`;
+    actualizarModoSoloTexto();
+  }
+
+  function actualizarModoSoloTexto(){
+    if(!dpi) return;
+    const chk = document.getElementById('chkSoloTexto');
+    dpi.soloTexto = !!chk?.checked;
+
+    if(dpi.canvas){
+      dpi.canvas.style.display = dpi.soloTexto ? 'none' : 'block';
+    }
+    if(dpi.previewWrap){
+      if(dpi.soloTexto){
+        dpi.previewWrap.style.minHeight = '297mm';
+      }else{
+        dpi.previewWrap.style.minHeight = '297mm';
+      }
+    }
+    if(dpi.msgPos){
+      dpi.msgPos.textContent = dpi.soloTexto
+        ? 'Modo solo texto activo: se imprimen únicamente los textos sobre hoja A4.'
+        : dpi.msgPos.textContent;
+    }
   }
 
   function loadPosicionesForTemplate(){
@@ -855,6 +891,7 @@
   window.guardarPosiciones = guardarPosiciones;
   window.resetPosiciones = resetPosiciones;
   window.aplicarDatos = aplicarDatos;
+  window.actualizarModoSoloTexto = actualizarModoSoloTexto;
 </script>
 </body>
 </html>
