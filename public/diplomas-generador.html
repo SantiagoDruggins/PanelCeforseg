@@ -371,7 +371,9 @@
 
   function buildTemplateKeyFromFile(file){
     if(!file) return '';
-    return `${DP_POS_VERSION}:local:${file.name}:${file.size}:${file.lastModified}`;
+    // Key estable: NO dependemos de lastModified, para que el usuario pueda re-seleccionar el mismo PDF
+    // y aun así se carguen las posiciones guardadas.
+    return `${DP_POS_VERSION}:local:${file.name}:${file.size}`;
   }
 
   function initDiplomaEngine(){
@@ -715,7 +717,10 @@
       alert('Primero selecciona una plantilla PDF.');
       return;
     }
-    if(!dpi.positions) actualizarPositionsDesdeDOM();
+    // Siempre recalculamos desde el DOM para capturar cambios por:
+    // - arrastre POS
+    // - cambios de tamaño de fuente (px) y ajuste automático
+    actualizarPositionsDesdeDOM();
     const templateRef = dpi.templateKey || dpi.templateUrl;
     const key = 'dp_positions_' + templateRef;
     localStorage.setItem(key, JSON.stringify(dpi.positions || dpi.defaultPos));
