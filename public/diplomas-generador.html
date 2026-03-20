@@ -312,6 +312,25 @@
                             <input id="tpl_texto_expedido" class="form-control form-control-sm" value="Expedido en la ciudad de {CIUDAD_EXP} el {FECHA_EXP_LARGA}">
                           </div>
                         </div>
+
+                        <div class="col-12 mt-3">
+                          <div class="border rounded-3 p-2 bg-light">
+                            <div class="fw-bold mb-2"><i class="bi bi-textarea-t"></i>Tamaño de fuente (px)</div>
+                            <div class="row g-2">
+                              <div class="col-md-6"><label class="form-label fw-bold small mb-1">Nombre</label><input type="number" id="fs_nombre" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-6"><label class="form-label fw-bold small mb-1">Curso</label><input type="number" id="fs_curso" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-4"><label class="form-label fw-bold small mb-1">Cédula</label><input type="number" id="fs_cedula" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-4"><label class="form-label fw-bold small mb-1">Ciudad</label><input type="number" id="fs_ciudad" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-4"><label class="form-label fw-bold small mb-1">Aprobó</label><input type="number" id="fs_aprobo" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-4"><label class="form-label fw-bold small mb-1">Interno</label><input type="number" id="fs_interno" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-4"><label class="form-label fw-bold small mb-1">Rango</label><input type="number" id="fs_rango" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-4"><label class="form-label fw-bold small mb-1">Folio</label><input type="number" id="fs_folio" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-6"><label class="form-label fw-bold small mb-1">Expedido</label><input type="number" id="fs_expedido" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                              <div class="col-md-6"><label class="form-label fw-bold small mb-1">Horas</label><input type="number" id="fs_horas" class="form-control form-control-sm" min="6" max="60" step="1"></div>
+                            </div>
+                            <div class="text-muted small mt-2">Si el texto no alcanza, se ajusta automáticamente hacia abajo.</div>
+                          </div>
+                        </div>
                       </div>
 
                       <div class="mt-3 d-flex gap-2 flex-wrap">
@@ -436,6 +455,40 @@
       const el = document.getElementById(id);
       if(el) el.addEventListener('change', applyFromInputs);
     });
+
+    // Controles de tamaño de fuente (px) por campo
+    const fontInputMap = {
+      nombre: 'fs_nombre',
+      curso: 'fs_curso',
+      cedula: 'fs_cedula',
+      ciudad: 'fs_ciudad',
+      aprobo: 'fs_aprobo',
+      interno: 'fs_interno',
+      rango: 'fs_rango',
+      folio: 'fs_folio',
+      expedido: 'fs_expedido',
+      horas: 'fs_horas'
+    };
+
+    const syncFontInputs = () => {
+      Object.entries(fontInputMap).forEach(([key, inputId]) => {
+        const input = document.getElementById(inputId);
+        if(!input) return;
+        const base = dpi.defaultPos?.[key]?.fontSize || '14px';
+        const n = Number(String(base).replace(/[^0-9.]/g,''));
+        input.value = Number.isFinite(n) && n > 0 ? String(n) : '';
+      });
+    };
+
+    Object.entries(fontInputMap).forEach(([key, inputId]) => {
+      const input = document.getElementById(inputId);
+      if(!input) return;
+      input.addEventListener('input', () => {
+        aplicarFontPx(key, input.value);
+      });
+    });
+
+    syncFontInputs();
 
     const tplInput = document.getElementById('tplFile');
     if(tplInput){
@@ -749,6 +802,20 @@
     }else{
       el.textContent = text;
     }
+    ajustarTextoCampo(key);
+  }
+
+  function aplicarFontPx(key, px){
+    if(!dpi || !dpi.overlayEls || !dpi.overlayEls[key]) return;
+    const n = Number(px);
+    if(!Number.isFinite(n) || n <= 0) return;
+
+    dpi.defaultPos[key].fontSize = n + 'px';
+    dpi.overlayEls[key].style.fontSize = n + 'px';
+    if(dpi.positions && dpi.positions[key]){
+      dpi.positions[key].fontSize = n + 'px';
+    }
+
     ajustarTextoCampo(key);
   }
 </script>
