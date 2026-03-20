@@ -271,6 +271,7 @@ function renderCursos(cursos){
   const select = document.getElementById('curso_id');
   const elValorTotal = document.getElementById('valorTotalCursos');
   const elSaldoTotal = document.getElementById('saldoTotalCursos');
+  const esGerente = localStorage.getItem('rol') === 'gerente';
 
   cont.innerHTML = '';
   select.innerHTML = '<option value="">Seleccione curso</option>';
@@ -292,6 +293,11 @@ function renderCursos(cursos){
           <h6>${c.nombre}</h6>
           <p><b>Precio:</b> ${typeof formatCOP === 'function' ? formatCOP(c.precio) : '$' + Number(c.precio).toLocaleString('es-CO') + ' COP'}</p>
           <p><b>Saldo:</b> ${typeof formatCOP === 'function' ? formatCOP(c.saldo) : '$' + Number(c.saldo).toLocaleString('es-CO') + ' COP'}</p>
+          ${
+            (editMode && esGerente)
+              ? `<button class="btn btn-sm btn-outline-danger w-100" onclick="eliminarCursoEstudiante(${c.curso_id})">Eliminar curso</button>`
+              : ''
+          }
         </div>
       </div>
     `;
@@ -483,6 +489,22 @@ async function agregarCursoEstudiante(){
   }
 
   // Recargamos la ficha para que se refleje el nuevo curso y el saldo.
+  cargarFicha();
+}
+
+async function eliminarCursoEstudiante(curso_id){
+  if(!confirm('¿Eliminar este curso del alumno? Se borrarán los abonos asociados a este curso.')) return;
+
+  const res = await fetch(`/api/estudiantes/${id}/curso/${curso_id}`, {
+    method:'DELETE',
+    headers:{ 'Authorization':'Bearer ' + token }
+  });
+
+  const data = await res.json();
+  if(!res.ok){
+    alert(data.mensaje || 'Error al eliminar curso');
+    return;
+  }
   cargarFicha();
 }
 </script>

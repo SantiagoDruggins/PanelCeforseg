@@ -578,6 +578,51 @@ app.post('/api/estudiantes/:id/curso',
 });
 
 /* =====================================================
+   ELIMINAR CURSO A ESTUDIANTE
+===================================================== */
+app.delete('/api/estudiantes/:id/curso/:curso_id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+
+    const estudianteId = req.params.id;
+    const cursoId = req.params.curso_id;
+
+    db.get(
+      'SELECT saldo FROM estudiante_cursos WHERE estudiante_id=? AND curso_id=?',
+      [estudianteId, cursoId],
+      (_, row) => {
+        if (!row) return res.status(404).json({ mensaje: 'Curso del estudiante no encontrado' });
+
+        db.serialize(() => {
+          // Si se elimina el curso de la ficha, eliminamos también los abonos asociados a ese curso
+          // para no dejar registros huérfanos.
+          db.run(
+            'DELETE FROM abonos WHERE estudiante_id=? AND curso_id=?',
+            [estudianteId, cursoId],
+            function () {
+              db.run(
+                'DELETE FROM estudiante_cursos WHERE estudiante_id=? AND curso_id=?',
+                [estudianteId, cursoId],
+                function (err2) {
+                  if (err2) return res.status(500).json({ mensaje: 'Error al eliminar curso del estudiante' });
+
+                  registrarAuditoria(req, 'eliminar_curso_estudiante', 'estudiante_cursos', null, {
+                    estudiante_id: estudianteId,
+                    curso_id: cursoId,
+                    saldo_anterior: row.saldo
+                  });
+                  res.json({ mensaje: 'Curso eliminado del estudiante' });
+                }
+              );
+            }
+          );
+        });
+      }
+    );
+});
+
+/* =====================================================
    ABONOS
 ===================================================== */
 app.get('/api/abonos/:id',
