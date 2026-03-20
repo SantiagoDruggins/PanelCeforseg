@@ -84,15 +84,6 @@
     .dp-adjust .dp-field:hover{
       background:rgba(255,255,255,.35);
     }
-    .dp-foto-img{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-      object-position:center top;
-      border:1px solid rgba(15,23,42,.6);
-      border-radius:2px;
-      background:#fff;
-    }
 
     .dp-btn-row .btn{
       border-radius:12px;
@@ -216,22 +207,6 @@
                   <div class="border rounded-3 p-2">
                     <div class="text-muted small">Plantilla actual</div>
                     <div id="tplActual" class="fw-bold text-truncate">—</div>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">Foto (opcional)</label>
-                  <input class="form-control" id="fotoFile" type="file" accept="image/*">
-                  <div class="form-text">Se muestra sobre la plantilla y se puede mover con POS.</div>
-                </div>
-                <div class="col-md-2">
-                  <button class="btn btn-outline-primary w-100 dp-btn" onclick="subirFotoDiploma()">
-                    <i class="bi bi-image me-1"></i>Subir foto
-                  </button>
-                </div>
-                <div class="col-md-3">
-                  <div class="border rounded-3 p-2">
-                    <div class="text-muted small">Foto actual</div>
-                    <div id="fotoActual" class="fw-bold text-truncate">—</div>
                   </div>
                 </div>
               </div>
@@ -389,7 +364,6 @@
     // POS por defecto (aprox). Si no calza con tu plantilla, se ajusta en modo arrastrar.
     const defaultPos = {
       nombre:   { x: 18, y: 6,  w: 64, h: 10, align: 'center', fontSize: '18px', fontWeight: 900 },
-      foto:     { x: 8.0, y: 23.0, w: 15.0, h: 20.0, align: 'left', fontSize: '12px', fontWeight: 700 },
       cedula:   { x: 28, y: 16, w: 44, h: 6,  align: 'center', fontSize: '13px', fontWeight: 800 },
       ciudad:   { x: 26, y: 22, w: 48, h: 6,  align: 'center', fontSize: '13px', fontWeight: 800 },
       aprobo:   { x: 26, y: 26.5, w: 48, h: 6, align: 'center', fontSize: '13px', fontWeight: 800 },
@@ -429,15 +403,10 @@
       overlayLayer.appendChild(el);
       overlayEls[k] = el;
       applyPosToEl(el, p);
-      if(k === 'foto'){
-        el.classList.add('dp-foto-field');
-        el.innerHTML = `<img class="dp-foto-img" id="dpFotoImg" alt="Foto diploma">`;
-      }else{
-        el.style.fontSize = p.fontSize || '14px';
-        el.style.fontWeight = p.fontWeight || 800;
-        el.style.textAlign = (p.align === 'center') ? 'center' : 'left';
-        el.innerHTML = `<div class="dp-field-inner"></div>`;
-      }
+      el.style.fontSize = p.fontSize || '14px';
+      el.style.fontWeight = p.fontWeight || 800;
+      el.style.textAlign = (p.align === 'center') ? 'center' : 'left';
+      el.innerHTML = `<div class="dp-field-inner"></div>`;
     });
 
     // Engine state
@@ -451,7 +420,6 @@
       dragMode: false,
       templateUrl: null,
       templateKey: '',
-      fotoUrl: '',
       msgPos
     };
 
@@ -489,16 +457,6 @@
       });
     }
 
-    const fotoInput = document.getElementById('fotoFile');
-    if(fotoInput){
-      fotoInput.addEventListener('change', async () => {
-        const file = fotoInput.files?.[0];
-        if(!file) return;
-        const localUrl = URL.createObjectURL(file);
-        setFoto(localUrl);
-        document.getElementById('fotoActual').textContent = file.name + ' (preview local)';
-      });
-    }
   }
 
   function applyPosToEl(el, pos){
@@ -546,37 +504,6 @@
     }finally{
       if(btn) btn.disabled = false;
     }
-  }
-
-  async function subirFotoDiploma(){
-    const fileInput = document.getElementById('fotoFile');
-    const file = fileInput?.files?.[0];
-    if(!file){
-      alert('Selecciona una foto.');
-      return;
-    }
-    const fd = new FormData();
-    fd.append('foto', file);
-
-    const res = await fetch('/api/diplomas/fotos', {
-      method:'POST',
-      headers:{ Authorization:'Bearer ' + token },
-      body: fd
-    });
-    const data = await res.json();
-    if(!res.ok){
-      alert(data.mensaje || 'Error subiendo foto');
-      return;
-    }
-    setFoto(data.url);
-    document.getElementById('fotoActual').textContent = file.name;
-  }
-
-  function setFoto(url){
-    const img = document.getElementById('dpFotoImg');
-    if(!img) return;
-    img.src = url || '';
-    dpi.fotoUrl = url || '';
   }
 
   async function renderPdf(source){
@@ -816,7 +743,6 @@
   function setFieldText(key, text){
     const el = dpi?.overlayEls?.[key];
     if(!el) return;
-    if(key === 'foto') return;
     const inner = el.querySelector('.dp-field-inner');
     if(inner){
       inner.textContent = text;
@@ -834,7 +760,6 @@
   window.guardarPosiciones = guardarPosiciones;
   window.resetPosiciones = resetPosiciones;
   window.aplicarDatos = aplicarDatos;
-  window.subirFotoDiploma = subirFotoDiploma;
 </script>
 </body>
 </html>
