@@ -150,6 +150,31 @@
     });
   }
 
+  function getBaseFontSizePx(key){
+    if(!dpi) return 14;
+    const fromPos = dpi.positions?.[key]?.fontSize || dpi.defaultPos?.[key]?.fontSize || '14px';
+    const n = Number(String(fromPos).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : 14;
+  }
+
+  function ajustarTextoCampo(key){
+    const el = dpi?.overlayEls?.[key];
+    if(!el) return;
+    const inner = el.querySelector('.dp-field-inner');
+    if(!inner) return;
+
+    const base = getBaseFontSizePx(key);
+    let current = base;
+    el.style.fontSize = current + 'px';
+
+    // Reduce tamaño de fuente hasta que el texto quepa en el recuadro.
+    const min = 9;
+    while(current > min && (inner.scrollHeight > el.clientHeight || inner.scrollWidth > el.clientWidth)){
+      current -= 0.5;
+      el.style.fontSize = current + 'px';
+    }
+  }
+
   async function cargarGenerador(){
     const content = document.querySelector('.content');
 
@@ -714,6 +739,7 @@
     }else{
       el.textContent = text;
     }
+    ajustarTextoCampo(key);
   }
 </script>
 
