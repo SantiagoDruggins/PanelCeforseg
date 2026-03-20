@@ -8,6 +8,11 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
+    /* Diploma en horizontal (A4 apaisado): coincide con plantilla física típica */
+    :root{
+      --dp-page-w: 297mm;
+      --dp-page-h: 210mm;
+    }
     .vf-wrap{
       border:1px solid rgba(10,59,120,.10);
       border-radius:16px;
@@ -32,9 +37,9 @@
       font-size:13px;
     }
     .dp-preview-wrap{
-      width:210mm;
+      width:var(--dp-page-w);
       max-width:100%;
-      min-height:297mm;
+      min-height:var(--dp-page-h);
       margin:0 auto;
       position:relative;
       background:#fff;
@@ -131,14 +136,15 @@
       .dp-preview-wrap{
         box-shadow:none !important;
         border-radius:0 !important;
-        width:210mm !important;
+        width:var(--dp-page-w) !important;
+        min-height:var(--dp-page-h) !important;
         max-width:100% !important;
         margin:0 auto !important;
         page-break-inside:avoid;
       }
       @page{
-        size:A4;
-        margin:10mm;
+        size:A4 landscape;
+        margin:8mm;
       }
     }
   </style>
@@ -228,7 +234,7 @@
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
                   <h5 class="vf-title mb-1">Generador de Diplomas (PDF)</h5>
-                  <p class="vf-subtitle mb-0">Sube la plantilla, completa datos y queda listo para imprimir.</p>
+                  <p class="vf-subtitle mb-0">Sube la plantilla, completa datos y queda listo para imprimir. <span class="text-primary">Vista e impresión en horizontal (A4 apaisado).</span></p>
                 </div>
               </div>
             </div>
@@ -258,7 +264,7 @@
                     </label>
                   </div>
                   <div class="form-text">
-                    Activa esta opción para ocultar el PDF de fondo y sacar únicamente los textos variables sobre hoja A4.
+                    Activa esta opción para ocultar el PDF de fondo y sacar únicamente los textos sobre hoja <strong>A4 horizontal</strong>.
                   </div>
                 </div>
               </div>
@@ -628,7 +634,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     wrap.style.height = '';
-    wrap.style.width = '210mm';
+    wrap.style.width = '297mm';
 
     let loading;
     if(typeof source === 'string'){
@@ -640,7 +646,7 @@
     const doc = await loading.promise;
     const page = await doc.getPage(1);
 
-    // Calcular escala para que el ancho del PDF encaje con el wrapper (210mm aprox)
+    // Calcular escala para que el ancho del PDF encaje con el wrapper (A4 horizontal ~297mm)
     const targetWidth = wrap.getBoundingClientRect().width;
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = targetWidth / unscaledViewport.width;
@@ -669,15 +675,11 @@
       dpi.canvas.style.display = dpi.soloTexto ? 'none' : 'block';
     }
     if(dpi.previewWrap){
-      if(dpi.soloTexto){
-        dpi.previewWrap.style.minHeight = '297mm';
-      }else{
-        dpi.previewWrap.style.minHeight = '297mm';
-      }
+      dpi.previewWrap.style.minHeight = '210mm';
     }
     if(dpi.msgPos){
       dpi.msgPos.textContent = dpi.soloTexto
-        ? 'Modo solo texto activo: se imprimen únicamente los textos sobre hoja A4.'
+        ? 'Modo solo texto activo: se imprimen únicamente los textos sobre hoja A4 horizontal.'
         : dpi.msgPos.textContent;
     }
   }
