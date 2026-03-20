@@ -144,6 +144,12 @@
     return `${d1.getDate()} al ${d2.getDate()} de ${mes} del ${año}`;
   }
 
+  function aplicarTemplateTexto(template, vars){
+    return String(template || '').replace(/\{([A-Z_]+)\}/g, (_, key) => {
+      return (vars[key] ?? '');
+    });
+  }
+
   async function cargarGenerador(){
     const content = document.querySelector('.content');
 
@@ -161,12 +167,20 @@
             </div>
             <div class="card-body">
               <div class="row g-3 align-items-end">
-                <div class="col-md-6">
+                <div class="col-md-3">
+                  <label class="form-label fw-bold">Tipo de plantilla</label>
+                  <select id="tplPreset" class="form-select">
+                    <option value="moderna" selected>Moderna</option>
+                    <option value="normal">Normal</option>
+                  </select>
+                  <div class="form-text">Cambia posiciones base de campos.</div>
+                </div>
+                <div class="col-md-4">
                   <label class="form-label fw-bold">Plantilla PDF</label>
                   <input class="form-control" id="tplFile" type="file" accept="application/pdf">
                   <div class="form-text">Recomendado: plantilla 1 página.</div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                   <button class="btn btn-primary w-100 dp-btn" onclick="subirPlantilla()">
                     <i class="bi bi-upload me-1"></i>Subir plantilla
                   </button>
@@ -208,11 +222,11 @@
                           <input id="in_nombre" class="form-control" placeholder="Ej: Diana Milena Duarte Rios">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label fw-bold">Cédula</label>
+                          <label class="form-label fw-bold">Cédula (solo número)</label>
                           <input id="in_cedula" class="form-control" placeholder="Ej: 1105614992">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label fw-bold">Ciudad (De ...)</label>
+                          <label class="form-label fw-bold">Ciudad (solo nombre)</label>
                           <input id="in_ciudad" class="form-control" placeholder="Ej: Pelaya">
                         </div>
                         <div class="col-12">
@@ -225,7 +239,7 @@
                           <input id="in_interno_letra" class="form-control" placeholder="Ej: G">
                         </div>
                         <div class="col-md-8">
-                          <label class="form-label fw-bold">Número interno</label>
+                          <label class="form-label fw-bold">Número interno (solo número)</label>
                           <input id="in_interno_num" class="form-control" placeholder="Ej: 7114">
                         </div>
 
@@ -239,11 +253,11 @@
                         </div>
 
                         <div class="col-md-6">
-                          <label class="form-label fw-bold">Folio</label>
+                          <label class="form-label fw-bold">Folio (solo número)</label>
                           <input id="in_folio" class="form-control" placeholder="Ej: 171">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label fw-bold">Horas</label>
+                          <label class="form-label fw-bold">Horas (solo número)</label>
                           <input id="in_horas" class="form-control" placeholder="Ej: 20">
                         </div>
 
@@ -254,6 +268,19 @@
                         <div class="col-md-6">
                           <label class="form-label fw-bold">Fecha de expedición</label>
                           <input type="date" id="in_fecha_expedicion" class="form-control">
+                        </div>
+
+                        <div class="col-12 mt-2">
+                          <div class="border rounded-3 p-2 bg-light">
+                            <div class="fw-bold mb-2"><i class="bi bi-chat-left-text me-1"></i>Plantillas de texto (frases)</div>
+                            <div class="small text-muted mb-2">
+                              Variables disponibles: {NOMBRE}, {CEDULA}, {CIUDAD}, {CURSO}, {INTERNO}, {RANGO}, {FOLIO}, {HORAS}, {CIUDAD_EXP}, {FECHA_EXP_LARGA}
+                            </div>
+                            <label class="form-label fw-bold small mb-1">Frase de rango / periodo</label>
+                            <input id="tpl_texto_rango" class="form-control form-control-sm mb-2" value="{RANGO}">
+                            <label class="form-label fw-bold small mb-1">Frase de expedición</label>
+                            <input id="tpl_texto_expedido" class="form-control form-control-sm" value="Expedido en la ciudad de {CIUDAD_EXP} el {FECHA_EXP_LARGA}">
+                          </div>
                         </div>
                       </div>
 
@@ -367,7 +394,7 @@
       if(!dpi) return;
       aplicarDatos(false);
     };
-    ['in_nombre','in_cedula','in_ciudad','in_curso','in_folio','in_horas','in_ciudad_expedicion'].forEach(id => {
+    ['in_nombre','in_cedula','in_ciudad','in_curso','in_folio','in_horas','in_ciudad_expedicion','tpl_texto_rango','tpl_texto_expedido'].forEach(id => {
       const el = document.getElementById(id);
       if(el) el.addEventListener('input', applyFromInputs);
     });
@@ -631,23 +658,43 @@
 
     const ciudadExp = document.getElementById('in_ciudad_expedicion')?.value || '';
     const fechaExp = document.getElementById('in_fecha_expedicion')?.value || '';
+    const tplRango = document.getElementById('tpl_texto_rango')?.value || '{RANGO}';
+    const tplExpedido = document.getElementById('tpl_texto_expedido')?.value || 'Expedido en la ciudad de {CIUDAD_EXP} el {FECHA_EXP_LARGA}';
 
     const internoFull = [internoLetra, internoNum].filter(Boolean).join(' ').trim();
     const rangoFull = formatRangoDesdeHasta(rangoDesde, rangoHasta);
-    const expedidoFull = ciudadExp && fechaExp
-      ? `${ciudadExp} el ${formatFechaES(fechaExp, { capitalizarMes: true })}`
-        .replace(/^\\s+/, '')
-      : '';
+    const fechaExpLarga = fechaExp ? formatFechaES(fechaExp, { capitalizarMes: true }) : '';
+
+    const vars = {
+      NOMBRE: nombre,
+      CEDULA: cedula,
+      CIUDAD: ciudad,
+      CURSO: curso,
+      INTERNO: internoFull,
+      RANGO: rangoFull,
+      FOLIO: folio,
+      HORAS: horas,
+      CIUDAD_EXP: ciudadExp,
+      FECHA_EXP_LARGA: fechaExpLarga
+    };
+    const textoRango = aplicarTemplateTexto(tplRango, vars).trim();
+    const textoExpedido = aplicarTemplateTexto(tplExpedido, vars).trim();
+
+    const cedulaFinal = cedula ? `Con Cédula de ciudadanía No. ${cedula}` : '—';
+    const ciudadFinal = ciudad ? `De ${ciudad}.` : '—';
+    const internoFinal = internoFull ? `NUMERO INTERNO N.° ${internoFull}` : '—';
+    const folioFinal = folio ? `FOLIO N° ${folio}` : '—';
+    const horasFinal = horas ? `Con una Intensidad teórica práctica de: ${horas} Horas` : '—';
 
     setFieldText('nombre', nombre || '—');
-    setFieldText('cedula', cedula || '—');
-    setFieldText('ciudad', ciudad || '—');
+    setFieldText('cedula', cedulaFinal);
+    setFieldText('ciudad', ciudadFinal);
     setFieldText('curso', curso || '—');
-    setFieldText('interno', internoFull || '—');
-    setFieldText('rango', rangoFull || '—');
-    setFieldText('folio', folio || '—');
-    setFieldText('expedido', expedidoFull || '—');
-    setFieldText('horas', horas ? `${horas}` : '—');
+    setFieldText('interno', internoFinal);
+    setFieldText('rango', textoRango || '—');
+    setFieldText('folio', folioFinal);
+    setFieldText('expedido', textoExpedido || '—');
+    setFieldText('horas', horasFinal);
 
     if(showMsg && dpi && dpi.msgPos) dpi.msgPos.textContent = 'Datos aplicados. Puedes imprimir.';
   }
