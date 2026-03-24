@@ -265,6 +265,7 @@ fetch('/layout.html')
               data-nota="${escapeAttr(a.nota || '')}"
               data-metodo="${escapeAttr(a.metodo_pago || 'efectivo')}"
               data-factura="${escapeAttr(a.numero_factura || '')}"
+              data-fecha="${escapeAttr((a.fecha || '').toString().slice(0, 10))}"
             >
               <td>${(a.fecha||'').toString().slice(0,16).replace('T',' ')}</td>
               <td>${(a.estudiante||'—').toString().slice(0,25)}</td>
@@ -297,6 +298,7 @@ function editarAbonoDashboard(btn){
   const nota = tr.getAttribute('data-nota') || '';
   const metodo = tr.getAttribute('data-metodo') || 'efectivo';
   const factura = tr.getAttribute('data-factura') || '';
+  const fechaRow = (tr.getAttribute('data-fecha') || '').trim();
 
   const v = prompt('Valor del abono:', valor);
   if(v === null) return;
@@ -304,6 +306,10 @@ function editarAbonoDashboard(btn){
   const n = prompt('Número de factura (obligatorio):', factura);
   if(n === null) return;
   if(!n.toString().trim()){ alert('El número de factura es obligatorio.'); return; }
+
+  const fe = prompt('Fecha del abono (AAAA-MM-DD):', fechaRow || new Date().toISOString().slice(0, 10));
+  if(fe === null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test((fe || '').trim())){ alert('Usa el formato AAAA-MM-DD para la fecha.'); return; }
 
   const no = prompt('Nota:', nota);
   if(no === null) return;
@@ -314,7 +320,7 @@ function editarAbonoDashboard(btn){
   fetch('/api/abonos/' + id, {
     method:'PUT',
     headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + localStorage.getItem('token') },
-    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n })
+    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n, fecha: fe.trim() })
   })
   .then(r=>r.json())
   .then(data=>{

@@ -703,17 +703,33 @@ app.get('/api/abonos/:id',
     (_, rows) => res.json(rows || []));
 });
 
+function normalizarFechaAbono(fechaInput) {
+  if (fechaInput === undefined || fechaInput === null || String(fechaInput).trim() === '') {
+    return new Date().toISOString();
+  }
+  const s = String(fechaInput).trim();
+  // input type="date" → YYYY-MM-DD
+  const d = s.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(s)
+    ? new Date(s + 'T12:00:00')
+    : new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 app.post('/api/abonos',
   verificarToken,
   permitirRoles('gerente','secretaria'),
   (req, res) => {
 
-    const { estudiante_id, curso_id, valor, nota, metodo_pago, numero_factura } = req.body;
+    const { estudiante_id, curso_id, valor, nota, metodo_pago, numero_factura, fecha } = req.body;
 
     const numeroFactura = (numero_factura || '').toString().trim();
     if (!numeroFactura) return res.status(400).json({ mensaje: 'El número de factura es obligatorio' });
 
     const metodo = metodo_pago || 'efectivo';
+
+    const fechaIso = normalizarFechaAbono(fecha);
+    if (!fechaIso) return res.status(400).json({ mensaje: 'Fecha del abono inválida' });
 
     db.get(
       'SELECT saldo FROM estudiante_cursos WHERE estudiante_id=? AND curso_id=?',
@@ -732,7 +748,7 @@ app.post('/api/abonos',
           estudiante_id,
           curso_id,
           valor,
-          new Date().toISOString(),
+          fechaIso,
           req.usuario.id,
           nota || null,
           req.usuario.rol,
@@ -744,42 +760,54 @@ app.post('/api/abonos',
           'UPDATE estudiante_cursos SET saldo=? WHERE estudiante_id=? AND curso_id=?',
           [nuevoSaldo, estudiante_id, curso_id],
           () => {
-            registrarAuditoria(req, 'crear_abono', 'abonos', null, { estudiante_id, curso_id, valor, metodo, numero_factura: numeroFactura });
+            registrarAuditoria(req, 'crear_abono', 'abonos', null, { estudiante_id, curso_id, valor, metodo, numero_factura: numeroFactura, fecha: fechaIso });
             res.json({ mensaje:'Abono registrado' });
           }
         );
       }
     );
-});
+  });
 
 /* EDITAR ABONO (SOLO GERENTE) - blindaje: secretaria no puede modificar montos */
 app.put('/api/abonos/:id',
   verificarToken,
   permitirRoles('gerente'),
   (req, res) => {
-    const { valor, nota, metodo_pago, numero_factura } = req.body;
+    const { valor, nota, metodo_pago, numero_factura, fecha } = req.body;
     const idAbono = req.params.id;
 
     const numeroFactura = (numero_factura || '').toString().trim();
     if (!numeroFactura) return res.status(400).json({ mensaje: 'El número de factura es obligatorio al editar.' });
 
-    db.get('SELECT estudiante_id, curso_id, valor AS valor_anterior FROM abonos WHERE id=?', [idAbono], (err, abono) => {
+    db.get('SELECT estudiante_id, curso_id, valor AS valor_anterior, fecha AS fecha_anterior FROM abonos WHERE id=?', [idAbono], (err, abono) => {
       if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
 
       const valorNuevo = valor !== undefined ? Number(valor) : abono.valor_anterior;
       const diferencia = valorNuevo - Number(abono.valor_anterior);
 
+      let fechaNueva = abono.fecha_anterior;
+      if (fecha !== undefined && fecha !== null && String(fecha).trim() !== '') {
+        const parsed = normalizarFechaAbono(fecha);
+        if (!parsed) return res.status(400).json({ mensaje: 'Fecha del abono inválida' });
+        fechaNueva = parsed;
+      }
+
       db.run(`
-        UPDATE abonos SET valor=?, nota=?, metodo_pago=?, numero_factura=?
+        UPDATE abonos SET valor=?, nota=?, metodo_pago=?, numero_factura=?, fecha=?
         WHERE id=?
-      `, [valorNuevo, nota || null, metodo_pago || 'efectivo', numeroFactura, idAbono], function () {
+      `, [valorNuevo, nota || null, metodo_pago || 'efectivo', numeroFactura, fechaNueva, idAbono], function () {
         if (this.changes === 0) return res.status(404).json({ mensaje: 'Abono no encontrado' });
 
         db.run(
           'UPDATE estudiante_cursos SET saldo = saldo - ? WHERE estudiante_id=? AND curso_id=?',
           [diferencia, abono.estudiante_id, abono.curso_id],
           () => {
-            registrarAuditoria(req, 'editar_abono', 'abonos', idAbono, { valor_anterior: abono.valor_anterior, valor_nuevo: valorNuevo });
+            registrarAuditoria(req, 'editar_abono', 'abonos', idAbono, {
+              valor_anterior: abono.valor_anterior,
+              valor_nuevo: valorNuevo,
+              fecha_anterior: abono.fecha_anterior,
+              fecha_nueva: fechaNueva
+            });
             res.json({ mensaje: 'Abono actualizado' });
           }
         );

@@ -199,6 +199,9 @@ async function cargarFicha(){
         <label class="form-label fw-bold">Número de factura <span class="text-danger">*</span></label>
         <input id="numero_factura" class="form-control mb-2" placeholder="Ej: FAC 5693" required>
 
+        <label class="form-label fw-bold">Fecha del abono</label>
+        <input type="date" id="fecha_abono" class="form-control mb-2" title="Día en que aplica el movimiento (caja / historial)">
+
         <select id="curso_id" class="form-select mb-2">
           <option value="">Seleccione curso</option>
         </select>
@@ -261,6 +264,9 @@ async function cargarFicha(){
   renderCursos(e.cursos);
   cargarAbonos();
 
+  const fa = document.getElementById('fecha_abono');
+  if(fa) fa.value = new Date().toISOString().slice(0, 10);
+
   if(editMode){
     cargarCursosDisponiblesParaAgregar(e.cursos);
   }
@@ -320,8 +326,9 @@ async function cargarAbonos(){
     const metodo = (a.metodo_pago || 'efectivo').toString().replace(/"/g,'&quot;');
     const facturaAttr = (a.numero_factura || '').toString().replace(/"/g,'&quot;');
     const notaAttr = (a.nota || '').toString().replace(/"/g,'&quot;');
+    const fechaInput = (a.fecha || '').toString().slice(0, 10);
     tabla.innerHTML += `
-      <tr data-abono-id="${a.id}" data-valor="${a.valor}" data-nota="${notaAttr}" data-metodo="${metodo}" data-factura="${facturaAttr}">
+      <tr data-abono-id="${a.id}" data-valor="${a.valor}" data-nota="${notaAttr}" data-metodo="${metodo}" data-factura="${facturaAttr}" data-fecha="${fechaInput}">
         <td>${factura}</td>
         <td>${new Date(a.fecha).toLocaleDateString()}</td>
         <td>${a.curso || '-'}</td>
@@ -368,7 +375,8 @@ async function registrarAbono(){
       valor,
       nota,
       metodo_pago,
-      numero_factura
+      numero_factura,
+      fecha: document.getElementById('fecha_abono').value
     })
   });
   const data = await res.json();
@@ -376,6 +384,8 @@ async function registrarAbono(){
   document.getElementById('numero_factura').value = '';
   document.getElementById('valor').value = '';
   document.getElementById('nota').value = '';
+  const fa = document.getElementById('fecha_abono');
+  if(fa) fa.value = new Date().toISOString().slice(0, 10);
   cargarFicha();
 }
 
@@ -386,12 +396,16 @@ function editarAbonoDesdeFila(btn){
   const nota = row.getAttribute('data-nota') || '';
   const metodo = row.getAttribute('data-metodo') || 'efectivo';
   const factura = row.getAttribute('data-factura') || '';
+  const fechaRow = (row.getAttribute('data-fecha') || '').trim();
 
   const v = prompt('Valor del abono:', valor);
   if(v === null) return;
   const n = prompt('Número de factura (obligatorio):', factura);
   if(n === null) return;
   if(!n.trim()){ alert('El número de factura es obligatorio.'); return; }
+  const fe = prompt('Fecha del abono (AAAA-MM-DD):', fechaRow || new Date().toISOString().slice(0, 10));
+  if(fe === null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test((fe || '').trim())){ alert('Usa el formato AAAA-MM-DD para la fecha.'); return; }
   const no = prompt('Nota:', nota);
   if(no === null) return;
   const met = prompt('Método de pago:', metodo);
@@ -400,7 +414,7 @@ function editarAbonoDesdeFila(btn){
   fetch('/api/abonos/' + idAbono, {
     method:'PUT',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
-    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n })
+    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n, fecha: fe.trim() })
   }).then(r=>r.json()).then(data=>{
     alert(data.mensaje || 'Actualizado');
     cargarFicha();
