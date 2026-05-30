@@ -4,6 +4,23 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 
+function cargarEnvLocal() {
+  const envPath = path.join(__dirname, '.env');
+  if (!fs.existsSync(envPath)) return;
+  const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+  lines.forEach(line => {
+    const clean = line.trim();
+    if (!clean || clean.startsWith('#')) return;
+    const idx = clean.indexOf('=');
+    if (idx === -1) return;
+    const key = clean.slice(0, idx).trim();
+    const value = clean.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  });
+}
+
+cargarEnvLocal();
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -24,6 +41,210 @@ function registrarAuditoria(req, accion, tabla_afectada, registro_id, detalles) 
     [u.id || null, u.usuario || null, u.rol || null, accion, tabla_afectada || null, registro_id || null, det],
     () => {}
   );
+}
+
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+}
+
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows || []));
+  });
+}
+
+function ymd(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function buildPeriodoFinanciero(query = {}) {
+  const hoy = new Date();
+  const periodo = (query.periodo || 'dia').toString();
+  let desde;
+  let hasta;
+
+  if (query.desde && query.hasta) {
+    desde = String(query.desde).slice(0, 10);
+    hasta = String(query.hasta).slice(0, 10);
+  } else if (periodo === 'semana') {
+    const d = new Date(hoy);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    desde = ymd(d);
+    hasta = ymd(hoy);
+  } else if (periodo === 'quincena') {
+    const day = hoy.getDate();
+    desde = ymd(new Date(hoy.getFullYear(), hoy.getMonth(), day <= 15 ? 1 : 16));
+    hasta = ymd(hoy);
+  } else if (periodo === 'mes') {
+    desde = ymd(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+    hasta = ymd(hoy);
+  } else if (periodo === 'trimestre') {
+    const firstMonth = Math.floor(hoy.getMonth() / 3) * 3;
+    desde = ymd(new Date(hoy.getFullYear(), firstMonth, 1));
+    hasta = ymd(hoy);
+  } else if (periodo === 'anio') {
+    desde = ymd(new Date(hoy.getFullYear(), 0, 1));
+    hasta = ymd(hoy);
+  } else {
+    desde = ymd(hoy);
+    hasta = ymd(hoy);
+  }
+
+  const d1 = new Date(desde + 'T12:00:00');
+  const d2 = new Date(hasta + 'T12:00:00');
+  const dias = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
+  const prevHasta = ymd(addDays(d1, -1));
+  const prevDesde = ymd(addDays(d1, -dias));
+
+  return { periodo, desde, hasta, dias, prev_desde: prevDesde, prev_hasta: prevHasta };
+}
+
+async function calcularCostoNomina(desde, hasta, dias) {
+  const basicos = await dbAll(`SELECT valor_basico, tipo_basico FROM nomina_basico`, []);
+  const costoBasico = basicos.reduce((sum, row) => {
+    const valor = Number(row.valor_basico) || 0;
+    const divisor = row.tipo_basico === 'quincenal' ? 15 : 30;
+    return sum + Math.round(valor * (dias / divisor));
+  }, 0);
+
+  const config = await dbGet('SELECT valor FROM config WHERE clave=?', ['comision_por_matricula']);
+  const comisionMatricula = config ? Number(config.valor) || 0 : 0;
+  const matriculas = await dbGet(`
+    SELECT COUNT(*) AS total
+    FROM estudiantes
+    WHERE usuario_matricula_id IS NOT NULL
+      AND DATE(fecha_matricula) BETWEEN DATE(?) AND DATE(?)
+  `, [desde, hasta]);
+  const costoMatriculas = (Number(matriculas && matriculas.total) || 0) * comisionMatricula;
+
+  const comisionesCurso = await dbGet(`
+    SELECT IFNULL(SUM(IFNULL(cc.valor_comision, 0)), 0) AS total
+    FROM estudiante_cursos ec
+    JOIN estudiantes e ON e.id = ec.estudiante_id
+    LEFT JOIN comisiones_curso cc ON cc.curso_id = ec.curso_id
+    WHERE e.usuario_matricula_id IS NOT NULL
+      AND DATE(e.fecha_matricula) BETWEEN DATE(?) AND DATE(?)
+  `, [desde, hasta]);
+
+  const costoCursos = Number(comisionesCurso && comisionesCurso.total) || 0;
+  return {
+    basico: costoBasico,
+    comisiones_matricula: costoMatriculas,
+    comisiones_cursos: costoCursos,
+    total: costoBasico + costoMatriculas + costoCursos
+  };
+}
+
+async function resumenFinanciero(query = {}) {
+  const rango = buildPeriodoFinanciero(query);
+
+  const ingresos = await dbGet(`
+    SELECT
+      IFNULL(SUM(valor), 0) AS total,
+      IFNULL(SUM(CASE WHEN metodo_pago='efectivo' THEN valor ELSE 0 END), 0) AS efectivo,
+      IFNULL(SUM(CASE WHEN metodo_pago='nequi' THEN valor ELSE 0 END), 0) AS nequi,
+      IFNULL(SUM(CASE WHEN metodo_pago NOT IN ('efectivo','nequi') OR metodo_pago IS NULL THEN valor ELSE 0 END), 0) AS transferencia,
+      COUNT(*) AS movimientos
+    FROM abonos
+    WHERE DATE(fecha,'localtime') BETWEEN DATE(?) AND DATE(?)
+  `, [rango.desde, rango.hasta]);
+
+  const anterior = await dbGet(`
+    SELECT IFNULL(SUM(valor), 0) AS total, COUNT(*) AS movimientos
+    FROM abonos
+    WHERE DATE(fecha,'localtime') BETWEEN DATE(?) AND DATE(?)
+  `, [rango.prev_desde, rango.prev_hasta]);
+
+  const porDia = await dbAll(`
+    SELECT DATE(fecha,'localtime') AS dia, IFNULL(SUM(valor), 0) AS total
+    FROM abonos
+    WHERE DATE(fecha,'localtime') BETWEEN DATE(?) AND DATE(?)
+    GROUP BY DATE(fecha,'localtime')
+    ORDER BY dia ASC
+  `, [rango.desde, rango.hasta]);
+
+  const topCursos = await dbAll(`
+    SELECT c.nombre, IFNULL(SUM(a.valor), 0) AS total, COUNT(*) AS movimientos
+    FROM abonos a
+    LEFT JOIN cursos c ON c.id = a.curso_id
+    WHERE DATE(a.fecha,'localtime') BETWEEN DATE(?) AND DATE(?)
+    GROUP BY c.id, c.nombre
+    ORDER BY total DESC
+    LIMIT 5
+  `, [rango.desde, rango.hasta]);
+
+  const morosos = await dbAll(`
+    SELECT e.id, e.nombre, e.cedula, e.telefono,
+           IFNULL(SUM(ec.saldo), 0) AS deuda,
+           MAX(a.fecha) AS ultimo_abono
+    FROM estudiantes e
+    JOIN estudiante_cursos ec ON ec.estudiante_id = e.id AND ec.saldo > 0
+    LEFT JOIN abonos a ON a.estudiante_id = e.id
+    GROUP BY e.id
+    ORDER BY deuda DESC
+    LIMIT 10
+  `, []);
+
+  const deuda = await dbGet(`
+    SELECT IFNULL(SUM(saldo),0) AS total,
+           COUNT(DISTINCT estudiante_id) AS estudiantes
+    FROM estudiante_cursos
+    WHERE saldo > 0
+  `, []);
+
+  const costos = await calcularCostoNomina(rango.desde, rango.hasta, rango.dias);
+  const totalIngresos = Number(ingresos && ingresos.total) || 0;
+  const totalAnterior = Number(anterior && anterior.total) || 0;
+  const diferencia = totalIngresos - totalAnterior;
+  const porcentaje = totalAnterior > 0 ? (diferencia / totalAnterior) * 100 : null;
+
+  return {
+    rango,
+    ingresos: {
+      total: totalIngresos,
+      efectivo: Number(ingresos && ingresos.efectivo) || 0,
+      nequi: Number(ingresos && ingresos.nequi) || 0,
+      transferencia: Number(ingresos && ingresos.transferencia) || 0,
+      movimientos: Number(ingresos && ingresos.movimientos) || 0
+    },
+    comparacion: {
+      periodo_anterior_total: totalAnterior,
+      periodo_anterior_movimientos: Number(anterior && anterior.movimientos) || 0,
+      diferencia,
+      porcentaje
+    },
+    costos_nomina: costos,
+    utilidad_estimada: totalIngresos - costos.total,
+    deuda: {
+      total: Number(deuda && deuda.total) || 0,
+      estudiantes: Number(deuda && deuda.estudiantes) || 0
+    },
+    por_dia: porDia,
+    top_cursos: topCursos,
+    morosos
+  };
+}
+
+function crearAnalisisLocal(data) {
+  const utilidad = data.utilidad_estimada;
+  const cmp = data.comparacion;
+  const tendencia = cmp.porcentaje === null
+    ? 'No hay periodo anterior para comparar.'
+    : `Frente al periodo anterior hay una variacion de ${cmp.porcentaje.toFixed(1)}%.`;
+  const utilidadTxt = utilidad >= 0
+    ? `El periodo muestra utilidad estimada positiva de ${utilidad.toLocaleString('es-CO')} COP.`
+    : `El periodo esta en perdida estimada de ${Math.abs(utilidad).toLocaleString('es-CO')} COP segun nomina configurada.`;
+  const morososTxt = data.morosos.slice(0, 3).map(m => `${m.nombre}: ${Number(m.deuda).toLocaleString('es-CO')} COP`).join('; ') || 'Sin morosos destacados.';
+  return `${utilidadTxt}\n${tendencia}\nDeuda total activa: ${data.deuda.total.toLocaleString('es-CO')} COP en ${data.deuda.estudiantes} estudiantes.\nPrioridad de cobro: ${morososTxt}`;
 }
 
 /* =====================================================
@@ -169,6 +390,83 @@ app.get('/api/dashboard/auditoria',
       });
     });
   });
+
+app.get('/api/dashboard/finanzas',
+  verificarToken,
+  permitirRoles('gerente'),
+  async (req, res) => {
+    try {
+      res.json(await resumenFinanciero(req.query));
+    } catch (err) {
+      console.error('Error en dashboard financiero:', err);
+      res.status(500).json({ mensaje: 'Error calculando dashboard financiero' });
+    }
+  }
+);
+
+app.post('/api/dashboard/ia-auditoria',
+  verificarToken,
+  permitirRoles('gerente'),
+  async (req, res) => {
+    try {
+      const data = await resumenFinanciero(req.body || {});
+      const local = crearAnalisisLocal(data);
+      const apiKey = process.env.GEMINI_API_KEY;
+      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+      if (!apiKey) {
+        return res.json({
+          modo: 'local',
+          analisis: local,
+          mensaje: 'Configura GEMINI_API_KEY en el servidor para activar Gemini AI.',
+          data
+        });
+      }
+
+      const prompt = `
+Eres auditor financiero para CEFORSEG. Analiza estos datos y responde en espanol claro.
+No inventes datos. Si hablas de utilidad, aclara que es estimada con los costos de nomina registrados.
+Entrega: 1) resumen ejecutivo, 2) comparacion con periodo anterior, 3) morosos prioritarios, 4) acciones recomendadas.
+
+Datos:
+${JSON.stringify(data, null, 2)}
+`;
+
+      const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2 }
+        })
+      });
+
+      const geminiJson = await geminiRes.json();
+      if (!geminiRes.ok) {
+        return res.status(502).json({
+          modo: 'local',
+          analisis: local,
+          mensaje: geminiJson.error && geminiJson.error.message ? geminiJson.error.message : 'Gemini no respondio correctamente.',
+          data
+        });
+      }
+
+      const text = (((geminiJson.candidates || [])[0] || {}).content || {}).parts || [];
+      res.json({
+        modo: 'gemini',
+        modelo: model,
+        analisis: text.map(p => p.text || '').join('\n').trim() || local,
+        data
+      });
+    } catch (err) {
+      console.error('Error en auditoria IA:', err);
+      res.status(500).json({ mensaje: 'Error generando auditoria IA' });
+    }
+  }
+);
 
 
 /* =====================================================

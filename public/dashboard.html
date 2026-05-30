@@ -24,6 +24,12 @@
     color:#0a3b78;
     margin-bottom:6px;
   }
+  .metric-card { min-height: 112px; }
+  .period-btn.active { background:#0a3b78; color:#fff; border-color:#0a3b78; }
+  .spark-bars { height: 150px; display:flex; align-items:end; gap:8px; padding-top:12px; }
+  .spark-bar { flex:1; min-width:16px; background:#0a3b78; border-radius:6px 6px 0 0; position:relative; }
+  .spark-bar small { position:absolute; left:50%; bottom:-22px; transform:translateX(-50%); font-size:11px; color:#6c757d; white-space:nowrap; }
+  .ai-output { white-space:pre-wrap; line-height:1.45; }
 </style>
 </head>
 
@@ -36,6 +42,8 @@ if(!localStorage.getItem('token')) location.href='/login';
 
 <script>
 function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
+let periodoFinanzas = 'dia';
+let ultimaFinanza = null;
 
 fetch('/layout.html')
 .then(r=>r.text())
@@ -196,6 +204,94 @@ fetch('/layout.html')
       </div>
 
       <div class="card shadow rounded-3 mb-4">
+        <div class="card-header bg-white">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div>
+              <strong>Analitica financiera</strong>
+              <div class="small text-muted" id="rangoFinanzas">Calculando periodo...</div>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Periodo financiero">
+              <button class="btn btn-outline-primary period-btn active" data-periodo="dia" onclick="cambiarPeriodoFinanzas('dia', this)">Dia</button>
+              <button class="btn btn-outline-primary period-btn" data-periodo="semana" onclick="cambiarPeriodoFinanzas('semana', this)">Semana</button>
+              <button class="btn btn-outline-primary period-btn" data-periodo="quincena" onclick="cambiarPeriodoFinanzas('quincena', this)">Quincena</button>
+              <button class="btn btn-outline-primary period-btn" data-periodo="mes" onclick="cambiarPeriodoFinanzas('mes', this)">Mes</button>
+              <button class="btn btn-outline-primary period-btn" data-periodo="trimestre" onclick="cambiarPeriodoFinanzas('trimestre', this)">Trimestre</button>
+              <button class="btn btn-outline-primary period-btn" data-periodo="anio" onclick="cambiarPeriodoFinanzas('anio', this)">Ano</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row g-3 mb-3">
+            <div class="col-md-3">
+              <div class="border rounded-3 p-3 metric-card">
+                <small>Ingresos periodo</small>
+                <h4 class="text-success mb-1" id="finIngresos">$0 COP</h4>
+                <span class="small text-muted" id="finMovimientos">0 movimientos</span>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="border rounded-3 p-3 metric-card">
+                <small>Utilidad estimada</small>
+                <h4 class="mb-1" id="finUtilidad">$0 COP</h4>
+                <span class="small text-muted">Ingresos menos nomina configurada</span>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="border rounded-3 p-3 metric-card">
+                <small>Vs periodo anterior</small>
+                <h4 class="mb-1" id="finComparacion">$0 COP</h4>
+                <span class="small text-muted" id="finComparacionDetalle">Sin comparacion</span>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="border rounded-3 p-3 metric-card">
+                <small>Deuda activa</small>
+                <h4 class="text-danger mb-1" id="finDeuda">$0 COP</h4>
+                <span class="small text-muted" id="finDeudores">0 estudiantes</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-lg-7">
+              <div class="border rounded-3 p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center">
+                  <strong>Ingresos por dia</strong>
+                  <span class="small text-muted" id="finCostos">Nomina: $0 COP</span>
+                </div>
+                <div class="spark-bars mb-4" id="finBarras"></div>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="border rounded-3 p-3 h-100">
+                <strong>Cursos con mas recaudo</strong>
+                <div id="finTopCursos" class="mt-2 small text-muted">Sin datos</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-lg-7">
+              <div class="border rounded-3 p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <strong>Auditoria IA</strong>
+                  <button class="btn btn-sm btn-primary" id="btnAuditoriaIA" onclick="generarAuditoriaIA()">Analizar con Gemini</button>
+                </div>
+                <div id="aiMensaje" class="small text-muted mb-2">Usa Gemini si GEMINI_API_KEY esta configurada en el servidor.</div>
+                <div id="aiOutput" class="ai-output small">Selecciona un periodo y ejecuta el analisis.</div>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="border rounded-3 p-3">
+                <strong>Morosos prioritarios</strong>
+                <div id="finMorosos" class="mt-2 small text-muted">Sin datos</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow rounded-3 mb-4">
         <div class="card-header bg-dark text-white">Últimos abonos (movimientos)</div>
         <div class="card-body p-0">
           <div class="table-responsive">
@@ -284,6 +380,8 @@ fetch('/layout.html')
         }
       }
     });
+
+    cargarFinanzas();
   }
 });
 
@@ -344,6 +442,130 @@ function eliminarAbonoDashboard(btn){
     alert(data.mensaje || 'Eliminado');
     location.reload();
   });
+}
+
+function cambiarPeriodoFinanzas(periodo, btn){
+  periodoFinanzas = periodo;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  cargarFinanzas();
+}
+
+function porcentajeTxt(v){
+  if(v === null || v === undefined) return 'Sin periodo anterior';
+  const signo = v > 0 ? '+' : '';
+  return signo + Number(v).toFixed(1) + '%';
+}
+
+function renderLista(items, renderItem, empty){
+  if(!items || items.length === 0) return `<div class="text-muted">${empty}</div>`;
+  return items.map(renderItem).join('');
+}
+
+async function cargarFinanzas(){
+  const headers = { Authorization: 'Bearer ' + localStorage.getItem('token') };
+  const res = await fetch('/api/dashboard/finanzas?periodo=' + encodeURIComponent(periodoFinanzas), { headers });
+  const data = await res.json();
+  if(!res.ok){
+    const out = document.getElementById('aiOutput');
+    if(out) out.textContent = data.mensaje || 'No se pudo cargar la analitica.';
+    return;
+  }
+
+  ultimaFinanza = data;
+  const fmt = typeof formatCOP === 'function' ? formatCOP : (n)=>'$'+Number(n).toLocaleString('es-CO')+' COP';
+
+  const rango = document.getElementById('rangoFinanzas');
+  if(rango) rango.textContent = `${data.rango.desde} a ${data.rango.hasta} · comparado con ${data.rango.prev_desde} a ${data.rango.prev_hasta}`;
+
+  const ingresos = document.getElementById('finIngresos');
+  if(ingresos) ingresos.textContent = fmt(data.ingresos.total);
+
+  const mov = document.getElementById('finMovimientos');
+  if(mov) mov.textContent = `${data.ingresos.movimientos} movimientos`;
+
+  const utilidad = document.getElementById('finUtilidad');
+  if(utilidad){
+    utilidad.textContent = fmt(data.utilidad_estimada);
+    utilidad.className = 'mb-1 ' + (Number(data.utilidad_estimada) >= 0 ? 'text-success' : 'text-danger');
+  }
+
+  const comp = document.getElementById('finComparacion');
+  if(comp){
+    const dif = Number(data.comparacion.diferencia || 0);
+    comp.textContent = (dif >= 0 ? '+' : '') + fmt(dif);
+    comp.className = 'mb-1 ' + (dif >= 0 ? 'text-success' : 'text-danger');
+  }
+
+  const compDetalle = document.getElementById('finComparacionDetalle');
+  if(compDetalle) compDetalle.textContent = `${porcentajeTxt(data.comparacion.porcentaje)} vs ${fmt(data.comparacion.periodo_anterior_total)}`;
+
+  const deuda = document.getElementById('finDeuda');
+  if(deuda) deuda.textContent = fmt(data.deuda.total);
+
+  const deudores = document.getElementById('finDeudores');
+  if(deudores) deudores.textContent = `${data.deuda.estudiantes} estudiantes`;
+
+  const costos = document.getElementById('finCostos');
+  if(costos) costos.textContent = `Nomina: ${fmt(data.costos_nomina.total)}`;
+
+  const barras = document.getElementById('finBarras');
+  if(barras){
+    const max = Math.max(1, ...((data.por_dia || []).map(x=>Number(x.total) || 0)));
+    barras.innerHTML = (data.por_dia && data.por_dia.length)
+      ? data.por_dia.map(x=>{
+          const h = Math.max(8, Math.round((Number(x.total || 0) / max) * 130));
+          const label = (x.dia || '').slice(5);
+          return `<div class="spark-bar" title="${x.dia}: ${fmt(x.total)}" style="height:${h}px"><small>${label}</small></div>`;
+        }).join('')
+      : '<div class="text-muted small">Sin ingresos en este periodo.</div>';
+  }
+
+  const top = document.getElementById('finTopCursos');
+  if(top){
+    top.innerHTML = renderLista(data.top_cursos, c => `
+      <div class="d-flex justify-content-between border-bottom py-2">
+        <span>${escapeAttr(c.nombre || 'Sin curso')}</span>
+        <strong>${fmt(c.total)}</strong>
+      </div>
+    `, 'Sin recaudos por curso.');
+  }
+
+  const morosos = document.getElementById('finMorosos');
+  if(morosos){
+    morosos.innerHTML = renderLista(data.morosos, m => `
+      <div class="border-bottom py-2">
+        <div class="d-flex justify-content-between gap-2">
+          <span>${escapeAttr((m.nombre || '').toString().slice(0, 28))}</span>
+          <strong class="text-danger">${fmt(m.deuda)}</strong>
+        </div>
+        <div class="text-muted">${escapeAttr(m.telefono || 'Sin telefono')} · ultimo abono: ${(m.ultimo_abono || 'sin abonos').toString().slice(0,10)}</div>
+      </div>
+    `, 'Sin morosos pendientes.');
+  }
+}
+
+async function generarAuditoriaIA(){
+  const btn = document.getElementById('btnAuditoriaIA');
+  const msg = document.getElementById('aiMensaje');
+  const out = document.getElementById('aiOutput');
+  if(btn) { btn.disabled = true; btn.textContent = 'Analizando...'; }
+  if(out) out.textContent = 'Revisando ingresos, utilidad, comparacion y morosos...';
+
+  try{
+    const res = await fetch('/api/dashboard/ia-auditoria', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + localStorage.getItem('token') },
+      body: JSON.stringify({ periodo: periodoFinanzas })
+    });
+    const data = await res.json();
+    if(msg) msg.textContent = data.modo === 'gemini' ? `Analisis generado con ${data.modelo}.` : (data.mensaje || 'Analisis local generado.');
+    if(out) out.textContent = data.analisis || data.mensaje || 'Sin respuesta.';
+  }catch(e){
+    if(out) out.textContent = 'No se pudo generar la auditoria IA.';
+  }finally{
+    if(btn) { btn.disabled = false; btn.textContent = 'Analizar con Gemini'; }
+  }
 }
 </script>
 </body>
