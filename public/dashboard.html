@@ -283,7 +283,7 @@ fetch('/layout.html')
             </div>
             <div class="col-lg-5">
               <div class="border rounded-3 p-3">
-                <strong>Morosos prioritarios</strong>
+                <strong>Estudiantes con deuda</strong>
                 <div id="finMorosos" class="mt-2 small text-muted">Sin datos</div>
               </div>
             </div>
@@ -533,7 +533,8 @@ async function cargarFinanzas(){
 
   const morosos = document.getElementById('finMorosos');
   if(morosos){
-    morosos.innerHTML = renderLista(data.morosos, m => `
+    const estudiantesDeuda = data.estudiantes_con_deuda || data.morosos || [];
+    morosos.innerHTML = renderLista(estudiantesDeuda, m => `
       <div class="border-bottom py-2">
         <div class="d-flex justify-content-between gap-2">
           <span>${escapeAttr((m.nombre || '').toString().slice(0, 28))}</span>
@@ -541,7 +542,7 @@ async function cargarFinanzas(){
         </div>
         <div class="text-muted">${escapeAttr(m.telefono || 'Sin telefono')} · ultimo abono: ${(m.ultimo_abono || 'sin abonos').toString().slice(0,10)}</div>
       </div>
-    `, 'Sin morosos pendientes.');
+    `, 'Sin estudiantes con deuda.');
   }
 }
 
@@ -550,7 +551,7 @@ async function generarAuditoriaIA(){
   const msg = document.getElementById('aiMensaje');
   const out = document.getElementById('aiOutput');
   if(btn) { btn.disabled = true; btn.textContent = 'Analizando...'; }
-  if(out) out.textContent = 'Revisando ingresos, utilidad, comparacion y morosos...';
+  if(out) out.textContent = 'Revisando ingresos, utilidad, comparacion y estudiantes con deuda...';
 
   try{
     const res = await fetch('/api/dashboard/ia-auditoria', {

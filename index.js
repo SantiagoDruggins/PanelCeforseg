@@ -182,14 +182,17 @@ async function resumenFinanciero(query = {}) {
     LIMIT 5
   `, [rango.desde, rango.hasta]);
 
-  const morosos = await dbAll(`
-    SELECT e.id, e.nombre, e.cedula, e.telefono,
+  const estudiantesConDeuda = await dbAll(`
+    SELECT MIN(e.id) AS id,
+           MAX(e.nombre) AS nombre,
+           COALESCE(NULLIF(TRIM(e.cedula), ''), 'ID-' || e.id) AS cedula,
+           MAX(e.telefono) AS telefono,
            IFNULL(SUM(ec.saldo), 0) AS deuda,
            MAX(a.fecha) AS ultimo_abono
     FROM estudiantes e
     JOIN estudiante_cursos ec ON ec.estudiante_id = e.id AND ec.saldo > 0
     LEFT JOIN abonos a ON a.estudiante_id = e.id
-    GROUP BY e.id
+    GROUP BY COALESCE(NULLIF(TRIM(e.cedula), ''), 'ID-' || e.id)
     ORDER BY deuda DESC
     LIMIT 10
   `, []);
@@ -230,7 +233,8 @@ async function resumenFinanciero(query = {}) {
     },
     por_dia: porDia,
     top_cursos: topCursos,
-    morosos
+    estudiantes_con_deuda: estudiantesConDeuda,
+    morosos: estudiantesConDeuda
   };
 }
 
@@ -243,8 +247,8 @@ function crearAnalisisLocal(data) {
   const utilidadTxt = utilidad >= 0
     ? `El periodo muestra utilidad estimada positiva de ${utilidad.toLocaleString('es-CO')} COP.`
     : `El periodo esta en perdida estimada de ${Math.abs(utilidad).toLocaleString('es-CO')} COP segun nomina configurada.`;
-  const morososTxt = data.morosos.slice(0, 3).map(m => `${m.nombre}: ${Number(m.deuda).toLocaleString('es-CO')} COP`).join('; ') || 'Sin morosos destacados.';
-  return `${utilidadTxt}\n${tendencia}\nDeuda total activa: ${data.deuda.total.toLocaleString('es-CO')} COP en ${data.deuda.estudiantes} estudiantes.\nPrioridad de cobro: ${morososTxt}`;
+  const deudaTxt = data.estudiantes_con_deuda.slice(0, 3).map(m => `${m.nombre}: ${Number(m.deuda).toLocaleString('es-CO')} COP`).join('; ') || 'Sin estudiantes con deuda destacados.';
+  return `${utilidadTxt}\n${tendencia}\nDeuda total activa: ${data.deuda.total.toLocaleString('es-CO')} COP en ${data.deuda.estudiantes} estudiantes.\nPrioridad de cobro: ${deudaTxt}`;
 }
 
 /* =====================================================
@@ -426,7 +430,7 @@ app.post('/api/dashboard/ia-auditoria',
       const prompt = `
 Eres auditor financiero para CEFORSEG. Analiza estos datos y responde en espanol claro.
 No inventes datos. Si hablas de utilidad, aclara que es estimada con los costos de nomina registrados.
-Entrega: 1) resumen ejecutivo, 2) comparacion con periodo anterior, 3) morosos prioritarios, 4) acciones recomendadas.
+Entrega: 1) resumen ejecutivo, 2) comparacion con periodo anterior, 3) estudiantes con deuda prioritarios, 4) acciones recomendadas.
 
 Datos:
 ${JSON.stringify(data, null, 2)}
