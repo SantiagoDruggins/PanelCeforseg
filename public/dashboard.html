@@ -29,7 +29,81 @@
   .spark-bars { height: 150px; display:flex; align-items:end; gap:8px; padding-top:12px; }
   .spark-bar { flex:1; min-width:16px; background:#0a3b78; border-radius:6px 6px 0 0; position:relative; }
   .spark-bar small { position:absolute; left:50%; bottom:-22px; transform:translateX(-50%); font-size:11px; color:#6c757d; white-space:nowrap; }
-  .ai-output { white-space:pre-wrap; line-height:1.45; }
+  .ai-panel {
+    border:1px solid #d9e2ef;
+    border-radius:8px;
+    background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow:0 14px 34px rgba(10, 59, 120, .08);
+    overflow:hidden;
+  }
+  .ai-panel-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:14px 16px;
+    border-bottom:1px solid #e7edf5;
+    background:#fff;
+  }
+  .ai-title {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:700;
+  }
+  .ai-title i {
+    width:34px;
+    height:34px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:8px;
+    background:#0a3b78;
+    color:#fff;
+  }
+  .ai-chip {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    width:max-content;
+    max-width:100%;
+    padding:4px 9px;
+    border-radius:999px;
+    background:#eef6ff;
+    color:#0a3b78;
+    font-size:12px;
+    font-weight:600;
+  }
+  .ai-body { padding:16px; }
+  .ai-output {
+    max-height:360px;
+    overflow:auto;
+    padding-right:6px;
+    color:#172033;
+    font-size:14px;
+    line-height:1.55;
+  }
+  .ai-output h5 {
+    margin:16px 0 8px;
+    font-size:15px;
+    font-weight:800;
+    color:#0a3b78;
+  }
+  .ai-output p { margin:0 0 10px; }
+  .ai-output strong { color:#07192f; }
+  .ai-output ul { margin:0 0 12px; padding-left:18px; }
+  .ai-output li { margin-bottom:6px; }
+  .ai-placeholder {
+    border:1px dashed #c9d7e8;
+    border-radius:8px;
+    padding:14px;
+    color:#6b7788;
+    background:#fbfdff;
+  }
+  @media(max-width:768px){
+    .ai-panel-head { align-items:flex-start; flex-direction:column; }
+    .ai-panel-head .btn { width:100%; }
+  }
 </style>
 </head>
 
@@ -272,13 +346,21 @@ fetch('/layout.html')
 
           <div class="row g-3 mt-1">
             <div class="col-lg-7">
-              <div class="border rounded-3 p-3">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <strong>Auditoria IA</strong>
-                  <button class="btn btn-sm btn-primary" id="btnAuditoriaIA" onclick="generarAuditoriaIA()">Analizar con Gemini</button>
+              <div class="ai-panel">
+                <div class="ai-panel-head">
+                  <div>
+                    <div class="ai-title"><i class="bi bi-stars"></i><span>Auditoria IA</span></div>
+                    <div id="aiMensaje" class="ai-chip mt-2"><i class="bi bi-cpu"></i><span>Gemini listo si la API key esta configurada</span></div>
+                  </div>
+                  <button class="btn btn-sm btn-primary" id="btnAuditoriaIA" onclick="generarAuditoriaIA()">
+                    <i class="bi bi-magic me-1"></i> Analizar
+                  </button>
                 </div>
-                <div id="aiMensaje" class="small text-muted mb-2">Usa Gemini si GEMINI_API_KEY esta configurada en el servidor.</div>
-                <div id="aiOutput" class="ai-output small">Selecciona un periodo y ejecuta el analisis.</div>
+                <div class="ai-body">
+                  <div id="aiOutput" class="ai-output">
+                    <div class="ai-placeholder">Selecciona un periodo y ejecuta el analisis.</div>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="col-lg-5">
@@ -462,6 +544,41 @@ function renderLista(items, renderItem, empty){
   return items.map(renderItem).join('');
 }
 
+function escapeHtml(s){
+  const div = document.createElement('div');
+  div.textContent = String(s ?? '');
+  return div.innerHTML;
+}
+
+function markdownBasico(texto){
+  const safe = escapeHtml(texto || '')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>');
+
+  return safe
+    .split(/\n{2,}/)
+    .map(block => {
+      const clean = block.trim();
+      if(!clean) return '';
+      if(/^<li>/.test(clean)) return `<ul>${clean}</ul>`;
+      if(/^<strong>.*<\/strong>$/.test(clean) && clean.length < 90) return `<h5>${clean.replace(/<\/?strong>/g, '')}</h5>`;
+      if(/^\d+\)\s*/.test(clean)) return `<h5>${clean.replace(/^\d+\)\s*/, '')}</h5>`;
+      return `<p>${clean.replace(/\n/g, '<br>')}</p>`;
+    })
+    .join('');
+}
+
+function setAiMensaje(texto, icono){
+  const msg = document.getElementById('aiMensaje');
+  if(!msg) return;
+  msg.innerHTML = `<i class="bi ${icono || 'bi-cpu'}"></i><span>${escapeHtml(texto)}</span>`;
+}
+
+function setAiOutput(html){
+  const out = document.getElementById('aiOutput');
+  if(out) out.innerHTML = html;
+}
+
 async function cargarFinanzas(){
   const headers = { Authorization: 'Bearer ' + localStorage.getItem('token') };
   const res = await fetch('/api/dashboard/finanzas?periodo=' + encodeURIComponent(periodoFinanzas), { headers });
@@ -551,10 +668,9 @@ async function cargarFinanzas(){
 
 async function generarAuditoriaIA(){
   const btn = document.getElementById('btnAuditoriaIA');
-  const msg = document.getElementById('aiMensaje');
-  const out = document.getElementById('aiOutput');
-  if(btn) { btn.disabled = true; btn.textContent = 'Analizando...'; }
-  if(out) out.textContent = 'Revisando ingresos, utilidad, comparacion y estudiantes con deuda...';
+  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Analizando'; }
+  setAiMensaje('Analizando periodo seleccionado', 'bi-activity');
+  setAiOutput('<div class="ai-placeholder">Revisando ingresos, utilidad, comparacion y estudiantes con deuda...</div>');
 
   try{
     const res = await fetch('/api/dashboard/ia-auditoria', {
@@ -563,12 +679,13 @@ async function generarAuditoriaIA(){
       body: JSON.stringify({ periodo: periodoFinanzas })
     });
     const data = await res.json();
-    if(msg) msg.textContent = data.modo === 'gemini' ? `Analisis generado con ${data.modelo}.` : (data.mensaje || 'Analisis local generado.');
-    if(out) out.textContent = data.analisis || data.mensaje || 'Sin respuesta.';
+    setAiMensaje(data.modo === 'gemini' ? `Generado con ${data.modelo}` : (data.mensaje || 'Analisis local generado'), data.modo === 'gemini' ? 'bi-stars' : 'bi-info-circle');
+    setAiOutput(markdownBasico(data.analisis || data.mensaje || 'Sin respuesta.'));
   }catch(e){
-    if(out) out.textContent = 'No se pudo generar la auditoria IA.';
+    setAiMensaje('Error al generar auditoria', 'bi-exclamation-triangle');
+    setAiOutput('<div class="ai-placeholder">No se pudo generar la auditoria IA.</div>');
   }finally{
-    if(btn) { btn.disabled = false; btn.textContent = 'Analizar con Gemini'; }
+    if(btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-magic me-1"></i> Analizar'; }
   }
 }
 </script>

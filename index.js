@@ -432,7 +432,16 @@ app.post('/api/dashboard/ia-auditoria',
       const prompt = `
 Eres auditor financiero para CEFORSEG. Analiza estos datos y responde en espanol claro.
 No inventes datos. Si hablas de utilidad, aclara que es estimada con los costos de nomina registrados.
-Entrega: 1) resumen ejecutivo, 2) comparacion con periodo anterior, 3) estudiantes con deuda prioritarios, 4) acciones recomendadas.
+No escribas introducciones largas. Entrega un informe ejecutivo breve, visual y accionable.
+Formato:
+**Resumen ejecutivo**
+- 2 a 3 hallazgos clave.
+**Comparacion**
+- Explica si estuvo mejor o peor que el periodo anterior.
+**Estudiantes con deuda**
+- Menciona prioridades de cobro si existen.
+**Acciones recomendadas**
+- 3 acciones concretas.
 
 Datos:
 ${JSON.stringify(data, null, 2)}
