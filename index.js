@@ -183,16 +183,19 @@ async function resumenFinanciero(query = {}) {
   `, [rango.desde, rango.hasta]);
 
   const estudiantesConDeuda = await dbAll(`
-    SELECT MIN(e.id) AS id,
-           MAX(e.nombre) AS nombre,
-           COALESCE(NULLIF(TRIM(e.cedula), ''), 'ID-' || e.id) AS cedula,
-           MAX(e.telefono) AS telefono,
+    SELECT e.id, e.nombre, e.cedula, e.telefono,
            IFNULL(SUM(ec.saldo), 0) AS deuda,
-           MAX(a.fecha) AS ultimo_abono
+           MAX(a.fecha) AS ultimo_abono,
+           (
+             SELECT COUNT(*)
+             FROM estudiantes e2
+             WHERE TRIM(IFNULL(e2.cedula, '')) <> ''
+               AND TRIM(e2.cedula) = TRIM(e.cedula)
+           ) AS registros_misma_cedula
     FROM estudiantes e
     JOIN estudiante_cursos ec ON ec.estudiante_id = e.id AND ec.saldo > 0
     LEFT JOIN abonos a ON a.estudiante_id = e.id
-    GROUP BY COALESCE(NULLIF(TRIM(e.cedula), ''), 'ID-' || e.id)
+    GROUP BY e.id
     ORDER BY deuda DESC
     LIMIT 10
   `, []);

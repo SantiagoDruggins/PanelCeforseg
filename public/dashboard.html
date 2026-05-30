@@ -540,7 +540,10 @@ async function cargarFinanzas(){
           <span>${escapeAttr((m.nombre || '').toString().slice(0, 28))}</span>
           <strong class="text-danger">${fmt(m.deuda)}</strong>
         </div>
-        <div class="text-muted">${escapeAttr(m.telefono || 'Sin telefono')} · ultimo abono: ${(m.ultimo_abono || 'sin abonos').toString().slice(0,10)}</div>
+        <div class="text-muted">
+          Ficha #${m.id} · ${escapeAttr(m.cedula || 'Sin cedula')} · ultimo abono: ${(m.ultimo_abono || 'sin abonos').toString().slice(0,10)}
+          ${Number(m.registros_misma_cedula || 0) > 1 ? '<span class="text-warning"> · revisar duplicado</span>' : ''}
+        </div>
       </div>
     `, 'Sin estudiantes con deuda.');
   }
