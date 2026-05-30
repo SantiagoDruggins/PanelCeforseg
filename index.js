@@ -185,7 +185,7 @@ async function resumenFinanciero(query = {}) {
   const estudiantesConDeuda = await dbAll(`
     SELECT e.id, e.nombre, e.cedula, e.telefono,
            IFNULL(SUM(ec.saldo), 0) AS deuda,
-           MAX(a.fecha) AS ultimo_abono,
+           (SELECT MAX(fecha) FROM abonos WHERE estudiante_id = e.id) AS ultimo_abono,
            (
              SELECT COUNT(*)
              FROM estudiantes e2
@@ -194,7 +194,6 @@ async function resumenFinanciero(query = {}) {
            ) AS registros_misma_cedula
     FROM estudiantes e
     JOIN estudiante_cursos ec ON ec.estudiante_id = e.id AND ec.saldo > 0
-    LEFT JOIN abonos a ON a.estudiante_id = e.id
     GROUP BY e.id
     ORDER BY deuda DESC
     LIMIT 10
