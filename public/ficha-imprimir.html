@@ -76,9 +76,11 @@
     <img id="fichaPlantilla" class="ficha-plantilla" alt="Plantilla de matrícula" src="/assets/ficha-matricula-blanca.png">
   </div>
 
+<script src="/permisos.js"></script>
 <script>
 (function() {
   if (!localStorage.getItem('token')) { location.href = '/login'; return; }
+  if (bloquearModuloAliado('Ficha de matricula')) return;
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
   if (!id) { document.getElementById('msgCarga').textContent = 'Falta id del estudiante. Use: /ficha-imprimir?id=123'; return; }

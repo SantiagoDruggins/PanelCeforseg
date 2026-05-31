@@ -114,6 +114,7 @@ if(!localStorage.getItem('token')) location.href='/login';
 
 <div id="app"></div>
 
+<script src="/permisos.js"></script>
 <script>
 function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
 let periodoFinanzas = 'dia';
@@ -123,6 +124,7 @@ fetch('/layout.html')
 .then(r=>r.text())
 .then(html=>{
   document.getElementById('app').innerHTML = html;
+  aplicarPermisosPanel();
   const content = document.querySelector('.content');
   const rol = localStorage.getItem('rol') || '';
 

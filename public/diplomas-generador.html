@@ -159,13 +159,16 @@
 
 <div id="app"></div>
 
+<script src="/permisos.js"></script>
 <script>
+  if (bloquearModuloAliado('Generador de Diplomas')) throw new Error('Acceso aliado bloqueado');
   const token = localStorage.getItem('token');
 
   fetch('/layout.html')
     .then(r => r.text())
     .then(html => {
       document.getElementById('app').innerHTML = html;
+      aplicarPermisosPanel();
       cargarGenerador();
     });
 

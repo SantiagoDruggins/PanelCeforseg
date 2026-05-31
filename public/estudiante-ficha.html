@@ -69,7 +69,9 @@ if(!localStorage.getItem('token')){
 
 <div id="app"></div>
 
+<script src="/permisos.js"></script>
 <script>
+if (bloquearModuloAliado('Ficha de estudiante')) throw new Error('Acceso aliado bloqueado');
 const token = localStorage.getItem('token');
 const params = new URLSearchParams(location.search);
 const id = params.get('id');
@@ -79,6 +81,7 @@ fetch('/layout.html')
   .then(r => r.text())
   .then(html => {
     document.getElementById('app').innerHTML = html;
+    aplicarPermisosPanel();
     cargarFicha();
   });
 

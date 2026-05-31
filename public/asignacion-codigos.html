@@ -17,6 +17,7 @@ if(!['gerente','aliado'].includes(localStorage.getItem('rol') || '')) location.h
 
 <div id="app"></div>
 
+<script src="/permisos.js"></script>
 <script>
 const token = localStorage.getItem('token');
 const rol = localStorage.getItem('rol') || '';
@@ -26,6 +27,7 @@ fetch('/layout.html')
   .then(r => r.text())
   .then(html => {
     document.getElementById('app').innerHTML = html;
+    aplicarPermisosPanel();
     render();
     cargarInicial();
   });

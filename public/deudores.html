@@ -14,7 +14,9 @@ if(!localStorage.getItem('token')) location.href='/login';
 
 <div id="app"></div>
 
+<script src="/permisos.js"></script>
 <script>
+if (bloquearModuloAliado('Deudores / Morosos')) throw new Error('Acceso aliado bloqueado');
 const token = localStorage.getItem('token');
 function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
 
@@ -24,6 +26,7 @@ fetch('/layout.html')
 .then(r=>r.text())
 .then(html=>{
   document.getElementById('app').innerHTML = html;
+  aplicarPermisosPanel();
   const content = document.querySelector('.content');
 
   content.innerHTML = `
