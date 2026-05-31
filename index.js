@@ -492,8 +492,21 @@ app.get('/api/codigos/aliados',
   verificarToken,
   permitirRoles('gerente'),
   (_, res) => {
-    db.all(
-      "SELECT id, usuario, rol FROM usuarios WHERE rol='aliado' ORDER BY usuario ASC",
+    db.all(`
+      SELECT
+        u.id,
+        u.usuario,
+        u.rol,
+        COUNT(ca.id) AS total_codigos,
+        IFNULL(SUM(CASE WHEN ca.estado='disponible' THEN 1 ELSE 0 END), 0) AS disponibles,
+        IFNULL(SUM(CASE WHEN ca.estado='usado' AND ca.estado_pago='pendiente' THEN ca.valor ELSE 0 END), 0) AS saldo_pendiente,
+        IFNULL(SUM(CASE WHEN ca.estado='usado' AND ca.estado_pago='pendiente' THEN 1 ELSE 0 END), 0) AS codigos_pendientes_pago
+      FROM usuarios u
+      LEFT JOIN codigos_asignados ca ON ca.aliado_id = u.id
+      WHERE u.rol='aliado'
+      GROUP BY u.id
+      ORDER BY u.usuario ASC
+    `,
       [],
       (err, rows) => {
         if (err) return res.status(500).json({ mensaje: 'Error cargando aliados' });
@@ -522,13 +535,16 @@ app.get('/api/codigos',
         ca.nci,
         ca.aliado_id,
         u.usuario AS aliado,
+        ca.valor,
         ca.estado,
+        ca.estado_pago,
         ca.alumno_nombre,
         ca.alumno_cedula,
         ca.curso,
         ca.fecha_expedicion,
         ca.creado_en,
         ca.usado_en,
+        ca.pagado_en,
         ca.certificado_id
       FROM codigos_asignados ca
       LEFT JOIN usuarios u ON u.id = ca.aliado_id
@@ -549,6 +565,7 @@ app.post('/api/codigos',
     const nro = (req.body.nro || '').toString().trim();
     const nci = (req.body.nci || '').toString().trim();
     const aliadoId = parseInt(req.body.aliado_id, 10);
+    const valor = Math.max(0, parseInt(req.body.valor, 10) || 0);
 
     if (!nro || !nci || !aliadoId) {
       return res.status(400).json({ mensaje: 'Aliado, NRO y NCI son obligatorios' });
@@ -559,13 +576,13 @@ app.post('/api/codigos',
       if (!aliado) return res.status(400).json({ mensaje: 'Selecciona un usuario con rol aliado' });
 
       db.run(`
-        INSERT INTO codigos_asignados (nro, nci, aliado_id, asignado_por_id)
-        VALUES (?,?,?,?)
-      `, [nro, nci, aliadoId, req.usuario.id], function(insertErr) {
+        INSERT INTO codigos_asignados (nro, nci, aliado_id, valor, asignado_por_id)
+        VALUES (?,?,?,?,?)
+      `, [nro, nci, aliadoId, valor, req.usuario.id], function(insertErr) {
         if (insertErr) {
           return res.status(400).json({ mensaje: 'Ese NRO o NCI ya existe' });
         }
-        registrarAuditoria(req, 'asignar_codigo', 'codigos_asignados', this.lastID, { nro, nci, aliado_id: aliadoId });
+        registrarAuditoria(req, 'asignar_codigo', 'codigos_asignados', this.lastID, { nro, nci, aliado_id: aliadoId, valor });
         res.json({ mensaje: 'Codigo asignado correctamente', id: this.lastID });
       });
     });
@@ -661,6 +678,45 @@ app.delete('/api/codigos/:id',
         registrarAuditoria(req, 'eliminar_codigo', 'codigos_asignados', id, {});
         res.json({ mensaje: 'Codigo eliminado' });
       });
+    });
+  }
+);
+
+app.put('/api/codigos/:id/pagar',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    db.run(`
+      UPDATE codigos_asignados
+      SET estado_pago='pagado',
+          pagado_por_id=?,
+          pagado_en=datetime('now','localtime')
+      WHERE id=? AND estado='usado' AND estado_pago='pendiente'
+    `, [req.usuario.id, id], function(err) {
+      if (err) return res.status(500).json({ mensaje: 'Error registrando pago' });
+      if (this.changes === 0) return res.status(400).json({ mensaje: 'No hay saldo pendiente en este codigo' });
+      registrarAuditoria(req, 'pagar_codigo', 'codigos_asignados', id, {});
+      res.json({ mensaje: 'Codigo marcado como pagado' });
+    });
+  }
+);
+
+app.put('/api/codigos/aliados/:id/pagar',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const aliadoId = parseInt(req.params.id, 10);
+    db.run(`
+      UPDATE codigos_asignados
+      SET estado_pago='pagado',
+          pagado_por_id=?,
+          pagado_en=datetime('now','localtime')
+      WHERE aliado_id=? AND estado='usado' AND estado_pago='pendiente'
+    `, [req.usuario.id, aliadoId], function(err) {
+      if (err) return res.status(500).json({ mensaje: 'Error registrando pago' });
+      registrarAuditoria(req, 'pagar_saldo_aliado', 'codigos_asignados', aliadoId, { codigos_pagados: this.changes });
+      res.json({ mensaje: this.changes > 0 ? 'Saldo del aliado puesto en cero' : 'El aliado no tiene saldo pendiente', codigos_pagados: this.changes });
     });
   }
 );

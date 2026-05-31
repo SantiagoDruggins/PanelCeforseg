@@ -242,20 +242,38 @@ db.run(`
     nro TEXT NOT NULL UNIQUE,
     nci TEXT NOT NULL UNIQUE,
     aliado_id INTEGER NOT NULL,
+    valor INTEGER DEFAULT 0,
     estado TEXT NOT NULL DEFAULT 'disponible',
+    estado_pago TEXT NOT NULL DEFAULT 'pendiente',
     alumno_nombre TEXT,
     alumno_cedula TEXT,
     curso TEXT,
     fecha_expedicion TEXT,
     certificado_id INTEGER,
     asignado_por_id INTEGER,
+    pagado_por_id INTEGER,
     creado_en TEXT DEFAULT (datetime('now','localtime')),
     usado_en TEXT,
+    pagado_en TEXT,
     FOREIGN KEY (aliado_id) REFERENCES usuarios(id),
     FOREIGN KEY (asignado_por_id) REFERENCES usuarios(id),
+    FOREIGN KEY (pagado_por_id) REFERENCES usuarios(id),
     FOREIGN KEY (certificado_id) REFERENCES certificados(id)
   )
 `);
+
+db.run(`ALTER TABLE codigos_asignados ADD COLUMN valor INTEGER DEFAULT 0`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('codigos_asignados.valor:', err.message);
+});
+db.run(`ALTER TABLE codigos_asignados ADD COLUMN estado_pago TEXT NOT NULL DEFAULT 'pendiente'`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('codigos_asignados.estado_pago:', err.message);
+});
+db.run(`ALTER TABLE codigos_asignados ADD COLUMN pagado_por_id INTEGER REFERENCES usuarios(id)`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('codigos_asignados.pagado_por_id:', err.message);
+});
+db.run(`ALTER TABLE codigos_asignados ADD COLUMN pagado_en TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('codigos_asignados.pagado_en:', err.message);
+});
 
 /* =========================
    AUDITORÍA (blindaje anti-fraude)

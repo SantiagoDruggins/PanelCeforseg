@@ -22,6 +22,7 @@ if(!['gerente','aliado'].includes(localStorage.getItem('rol') || '')) location.h
 const token = localStorage.getItem('token');
 const rol = localStorage.getItem('rol') || '';
 let codigos = [];
+let aliados = [];
 
 fetch('/layout.html')
   .then(r => r.text())
@@ -51,19 +52,23 @@ function render(){
           <h6 class="mb-3">Asignar codigo a socio / aliado / comprador</h6>
           <form id="formAsignar">
             <div class="row g-3">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label">Aliado</label>
                 <select id="aliado_id" class="form-select" required>
                   <option value="">Cargando aliados...</option>
                 </select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label">NRO</label>
                 <input id="nro" class="form-control" placeholder="Ej: NRO-0001" required>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label">NCI</label>
                 <input id="nci" class="form-control" placeholder="Ej: NCI-0001" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Valor</label>
+                <input id="valor" type="number" min="0" step="1000" class="form-control" value="15000" required>
               </div>
             </div>
             <button class="btn btn-primary mt-3"><i class="bi bi-plus-circle me-1"></i>Asignar codigo</button>
@@ -71,6 +76,25 @@ function render(){
         </div>
       </div>
     ` : ''}
+
+    ${esGerente ? `
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h6 class="mb-0">Cartera por aliado</h6>
+            <span class="badge text-bg-warning" id="saldoGlobal">Saldo pendiente: $0 COP</span>
+          </div>
+          <div id="tablaAliados" class="table-responsive">
+            <div class="text-muted">Cargando saldos...</div>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>Saldo pendiente por codigos usados</span>
+        <strong id="saldoAliado">$0 COP</strong>
+      </div>
+    `}
 
     <div id="panelUso" class="card shadow-sm mb-4 d-none">
       <div class="card-body">
@@ -123,7 +147,9 @@ function render(){
                 <th>NRO</th>
                 <th>NCI</th>
                 ${esGerente ? '<th>Aliado</th>' : ''}
+                <th>Valor</th>
                 <th>Estado</th>
+                <th>Pago</th>
                 <th>Alumno</th>
                 <th>Cedula</th>
                 <th>Curso</th>
@@ -132,7 +158,7 @@ function render(){
               </tr>
             </thead>
             <tbody id="tablaCodigos">
-              <tr><td colspan="${esGerente ? 9 : 8}" class="text-center text-muted">Cargando...</td></tr>
+              <tr><td colspan="${esGerente ? 11 : 10}" class="text-center text-muted">Cargando...</td></tr>
             </tbody>
           </table>
         </div>
@@ -160,9 +186,11 @@ async function cargarAliados(){
     alert(data.mensaje || 'Error cargando aliados');
     return;
   }
-  sel.innerHTML = '<option value="">Seleccione aliado...</option>' + (data || []).map(a =>
+  aliados = data || [];
+  sel.innerHTML = '<option value="">Seleccione aliado...</option>' + aliados.map(a =>
     `<option value="${a.id}">${escapeHtml(a.usuario)}</option>`
   ).join('');
+  pintarAliados();
 }
 
 async function cargarCodigos(){
@@ -181,7 +209,8 @@ async function asignarCodigo(e){
   const body = {
     aliado_id: document.getElementById('aliado_id').value,
     nro: document.getElementById('nro').value.trim(),
-    nci: document.getElementById('nci').value.trim()
+    nci: document.getElementById('nci').value.trim(),
+    valor: document.getElementById('valor').value
   };
   const res = await fetch('/api/codigos', {
     method: 'POST',
@@ -192,6 +221,8 @@ async function asignarCodigo(e){
   alert(data.mensaje || 'Operacion completada');
   if(res.ok){
     e.target.reset();
+    document.getElementById('valor').value = '15000';
+    cargarAliados();
     cargarCodigos();
   }
 }
@@ -251,15 +282,98 @@ async function eliminarCodigo(id){
   if(res.ok) cargarCodigos();
 }
 
+async function pagarCodigo(id){
+  if(!confirm('Marcar este codigo como pagado?')) return;
+  const res = await fetch('/api/codigos/' + id + '/pagar', {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  const data = await res.json();
+  alert(data.mensaje || 'Operacion completada');
+  if(res.ok){
+    cargarAliados();
+    cargarCodigos();
+  }
+}
+
+async function pagarAliado(id){
+  const aliado = aliados.find(a => String(a.id) === String(id));
+  const nombre = aliado ? aliado.usuario : 'este aliado';
+  if(!confirm('Poner en cero el saldo pendiente de ' + nombre + '?')) return;
+  const res = await fetch('/api/codigos/aliados/' + id + '/pagar', {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  const data = await res.json();
+  alert(data.mensaje || 'Operacion completada');
+  if(res.ok){
+    cargarAliados();
+    cargarCodigos();
+  }
+}
+
+function pintarAliados(){
+  if(rol !== 'gerente') return;
+  const cont = document.getElementById('tablaAliados');
+  if(!cont) return;
+  const saldoTotal = aliados.reduce((sum, a) => sum + (Number(a.saldo_pendiente) || 0), 0);
+  const global = document.getElementById('saldoGlobal');
+  if(global) global.textContent = 'Saldo pendiente: ' + formatCOP(saldoTotal);
+
+  if(!aliados.length){
+    cont.innerHTML = '<div class="text-muted">No hay usuarios aliados creados.</div>';
+    return;
+  }
+
+  cont.innerHTML = `
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Aliado</th>
+          <th>Codigos</th>
+          <th>Disponibles</th>
+          <th>Usados sin pagar</th>
+          <th>Saldo</th>
+          <th>Accion</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${aliados.map(a => {
+          const saldo = Number(a.saldo_pendiente) || 0;
+          return `
+            <tr>
+              <td>${escapeHtml(a.usuario)}</td>
+              <td>${Number(a.total_codigos) || 0}</td>
+              <td>${Number(a.disponibles) || 0}</td>
+              <td>${Number(a.codigos_pendientes_pago) || 0}</td>
+              <td><strong class="${saldo > 0 ? 'text-danger' : 'text-success'}">${formatCOP(saldo)}</strong></td>
+              <td>
+                ${saldo > 0
+                  ? `<button class="btn btn-sm btn-outline-success" onclick="pagarAliado(${a.id})">Pagó / poner en cero</button>`
+                  : '<span class="text-muted small">Sin deuda</span>'}
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
 function pintarCodigos(){
   const esGerente = rol === 'gerente';
   const tbody = document.getElementById('tablaCodigos');
   const total = codigos.length;
   const disponibles = codigos.filter(c => c.estado === 'disponible').length;
+  const saldoPendiente = codigos
+    .filter(c => c.estado === 'usado' && c.estado_pago === 'pendiente')
+    .reduce((sum, c) => sum + (Number(c.valor) || 0), 0);
   document.getElementById('resumenCodigos').textContent = `${total} codigos · ${disponibles} disponibles`;
+  const saldoAliado = document.getElementById('saldoAliado');
+  if(saldoAliado) saldoAliado.textContent = formatCOP(saldoPendiente);
 
   if(!codigos.length){
-    tbody.innerHTML = `<tr><td colspan="${esGerente ? 9 : 8}" class="text-center text-muted">No hay codigos asignados</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${esGerente ? 11 : 10}" class="text-center text-muted">No hay codigos asignados</td></tr>`;
     return;
   }
 
@@ -268,17 +382,25 @@ function pintarCodigos(){
     const badge = disponible
       ? '<span class="badge text-bg-success">Disponible</span>'
       : '<span class="badge text-bg-secondary">Usado</span>';
+    const pago = c.estado === 'usado'
+      ? (c.estado_pago === 'pagado'
+        ? '<span class="badge text-bg-success">Pagado</span>'
+        : '<span class="badge text-bg-warning">Pendiente</span>')
+      : '<span class="text-muted small">No aplica</span>';
     const acciones = disponible
       ? `<button class="btn btn-sm btn-success" onclick="iniciarUso(${c.id})">Usar</button>
          ${esGerente ? `<button class="btn btn-sm btn-outline-danger" onclick="eliminarCodigo(${c.id})">Eliminar</button>` : ''}`
-      : (c.certificado_id ? `<span class="text-muted small">Cert. #${c.certificado_id}</span>` : '<span class="text-muted small">Sin acciones</span>');
+      : `${c.certificado_id ? `<span class="text-muted small">Cert. #${c.certificado_id}</span>` : ''}
+         ${esGerente && c.estado_pago === 'pendiente' ? `<button class="btn btn-sm btn-outline-success" onclick="pagarCodigo(${c.id})">Pagó</button>` : ''}`;
 
     return `
       <tr>
         <td><strong>${escapeHtml(c.nro)}</strong></td>
         <td><strong>${escapeHtml(c.nci)}</strong></td>
         ${esGerente ? `<td>${escapeHtml(c.aliado || '-')}</td>` : ''}
+        <td>${formatCOP(c.valor || 0)}</td>
         <td>${badge}</td>
+        <td>${pago}</td>
         <td>${escapeHtml(c.alumno_nombre || '-')}</td>
         <td>${escapeHtml(c.alumno_cedula || '-')}</td>
         <td>${escapeHtml(c.curso || '-')}</td>
@@ -298,6 +420,10 @@ function escapeHtml(s){
     '"':'&quot;',
     "'":'&#039;'
   }[m]));
+}
+
+function formatCOP(n){
+  return '$' + Number(n || 0).toLocaleString('es-CO') + ' COP';
 }
 </script>
 </body>
