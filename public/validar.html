@@ -221,7 +221,7 @@ tbody tr:hover{
 <div id="app"></div>
 
 <script>
-// Pagina publica (sin layout del panel). Valida certificados por cedula, NRO o NCI.
+// Pagina publica (sin layout del panel). Valida certificados por cedula, NRO, NCI, interno o folio.
 
 function escapeHtml(s){
   if(s === null || s === undefined) return '';
@@ -241,11 +241,11 @@ document.getElementById('app').innerHTML = `
         <img src="/assets/logo.png" alt="CEFORSEG">
       </div>
       <h2>VALIDAR CERTIFICADOS</h2>
-      <div class="subtitle">Ingrese cedula, NRO o NCI para consultar</div>
+      <div class="subtitle">Ingrese cedula, NRO, NCI, interno o folio para consultar</div>
     </div>
 
     <div class="search">
-      <input id="cedula" placeholder="Cedula, NRO o NCI">
+      <input id="cedula" placeholder="Cedula, NRO, NCI, interno o folio">
       <button onclick="validar()" id="btnValidar">Validar</button>
     </div>
 
@@ -299,16 +299,24 @@ async function validar(){
   const filas = (lista) => lista.map(c => {
     const fecha = c.fecha_diploma ? escapeHtml(c.fecha_diploma) : '-';
     const curso = c.curso ? escapeHtml(c.curso) : '-';
-    const nro = c.nro ? escapeHtml(c.nro) : '-';
-    const nci = c.nci ? escapeHtml(c.nci) : '-';
+    const tipo = c.tipo_codigo || 'fundamentacion';
+    const codigo = tipo === 'fundamentacion'
+      ? `NRO: ${escapeHtml(c.nro || '-')}<br>NCI: ${escapeHtml(c.nci || '-')}`
+      : `Interno: ${escapeHtml(c.nro_interno || '-')}<br>Folio: ${escapeHtml(c.nro_folio || '-')}`;
+    const tramite = [
+      c.lugar_expedicion_cedula ? `Cedula expedida en ${escapeHtml(c.lugar_expedicion_cedula)}` : '',
+      c.fecha_curso ? `Curso: ${escapeHtml(c.fecha_curso)}` : '',
+      c.ciudad_tramitado ? `Tramitado en ${escapeHtml(c.ciudad_tramitado)}` : ''
+    ].filter(Boolean).join('<br>') || '-';
     const pdf = c.archivo_pdf ? escapeHtml(c.archivo_pdf) : '';
 
     return `
       <tr>
         <td>${curso}</td>
         <td>${fecha}</td>
-        <td>${nro}</td>
-        <td>${nci}</td>
+        <td>${escapeHtml(tipo)}</td>
+        <td>${codigo}</td>
+        <td>${tramite}</td>
         <td>
           ${pdf ? `<a href=\"${pdf}\" target=\"_blank\" class=\"pdf\">Abrir PDF</a>` : '-'}
         </td>
@@ -333,8 +341,9 @@ async function validar(){
           <tr>
             <th>Curso</th>
             <th>Fecha</th>
-            <th>NRO</th>
-            <th>NCI</th>
+            <th>Tipo</th>
+            <th>Codigo</th>
+            <th>Tramite</th>
             <th>PDF</th>
           </tr>
         </thead>
@@ -356,8 +365,9 @@ async function validar(){
           <tr>
             <th>Curso</th>
             <th>Fecha</th>
-            <th>NRO</th>
-            <th>NCI</th>
+            <th>Tipo</th>
+            <th>Codigo</th>
+            <th>Tramite</th>
             <th>PDF</th>
           </tr>
         </thead>

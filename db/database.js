@@ -233,22 +233,51 @@ db.run(`ALTER TABLE certificados ADD COLUMN codigo_asignado_id INTEGER REFERENCE
   }
 });
 
+[
+  ['tipo_codigo', 'TEXT DEFAULT "fundamentacion"'],
+  ['nro_interno', 'TEXT'],
+  ['nro_folio', 'TEXT'],
+  ['nombre1', 'TEXT'],
+  ['nombre2', 'TEXT'],
+  ['apellido1', 'TEXT'],
+  ['apellido2', 'TEXT'],
+  ['lugar_expedicion_cedula', 'TEXT'],
+  ['fecha_curso', 'TEXT'],
+  ['fecha_acta', 'TEXT'],
+  ['ciudad_tramitado', 'TEXT']
+].forEach(([col, def]) => {
+  db.run(`ALTER TABLE certificados ADD COLUMN ${col} ${def}`, (err) => {
+    if (err && !err.message.includes('duplicate column')) console.log(`certificados.${col}:`, err.message);
+  });
+});
+
 /* =========================
    ASIGNACION DE CODIGOS
 ========================= */
 db.run(`
   CREATE TABLE IF NOT EXISTS codigos_asignados (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo_codigo TEXT DEFAULT 'fundamentacion',
     nro TEXT NOT NULL UNIQUE,
     nci TEXT NOT NULL UNIQUE,
+    nro_interno TEXT,
+    nro_folio TEXT,
     aliado_id INTEGER NOT NULL,
     valor INTEGER DEFAULT 0,
     estado TEXT NOT NULL DEFAULT 'disponible',
     estado_pago TEXT NOT NULL DEFAULT 'pendiente',
     alumno_nombre TEXT,
     alumno_cedula TEXT,
+    nombre1 TEXT,
+    nombre2 TEXT,
+    apellido1 TEXT,
+    apellido2 TEXT,
+    lugar_expedicion_cedula TEXT,
     curso TEXT,
     fecha_expedicion TEXT,
+    fecha_curso TEXT,
+    fecha_acta TEXT,
+    ciudad_tramitado TEXT,
     certificado_id INTEGER,
     asignado_por_id INTEGER,
     pagado_por_id INTEGER,
@@ -273,6 +302,24 @@ db.run(`ALTER TABLE codigos_asignados ADD COLUMN pagado_por_id INTEGER REFERENCE
 });
 db.run(`ALTER TABLE codigos_asignados ADD COLUMN pagado_en TEXT`, (err) => {
   if (err && !err.message.includes('duplicate column')) console.log('codigos_asignados.pagado_en:', err.message);
+});
+
+[
+  ['tipo_codigo', 'TEXT DEFAULT "fundamentacion"'],
+  ['nro_interno', 'TEXT'],
+  ['nro_folio', 'TEXT'],
+  ['nombre1', 'TEXT'],
+  ['nombre2', 'TEXT'],
+  ['apellido1', 'TEXT'],
+  ['apellido2', 'TEXT'],
+  ['lugar_expedicion_cedula', 'TEXT'],
+  ['fecha_curso', 'TEXT'],
+  ['fecha_acta', 'TEXT'],
+  ['ciudad_tramitado', 'TEXT']
+].forEach(([col, def]) => {
+  db.run(`ALTER TABLE codigos_asignados ADD COLUMN ${col} ${def}`, (err) => {
+    if (err && !err.message.includes('duplicate column')) console.log(`codigos_asignados.${col}:`, err.message);
+  });
 });
 
 db.run(`

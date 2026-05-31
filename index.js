@@ -515,6 +515,24 @@ ${JSON.stringify(data, null, 2)}
 /* =====================================================
    ASIGNACION DE CODIGOS NRO / NCI
 ===================================================== */
+function normalizarTipoCodigo(tipo) {
+  const t = (tipo || 'fundamentacion').toString().trim().toLowerCase();
+  if (['seminario', 'diplomado'].includes(t)) return t;
+  return 'fundamentacion';
+}
+
+function nombreCompletoCodigo(body = {}) {
+  return [body.nombre1, body.nombre2, body.apellido1, body.apellido2]
+    .map(v => (v || '').toString().trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function validarDatosAlumnoCodigo(body = {}) {
+  const requeridos = ['nombre1', 'apellido1', 'alumno_cedula', 'lugar_expedicion_cedula', 'curso', 'fecha_curso', 'fecha_acta', 'ciudad_tramitado'];
+  return requeridos.every(k => (body[k] || '').toString().trim());
+}
+
 app.get('/api/codigos/aliados',
   verificarToken,
   permitirRoles('gerente'),
@@ -567,8 +585,11 @@ app.get('/api/codigos',
     db.all(`
       SELECT
         ca.id,
+        ca.tipo_codigo,
         ca.nro,
         ca.nci,
+        ca.nro_interno,
+        ca.nro_folio,
         ca.aliado_id,
         u.usuario AS aliado,
         ca.valor,
@@ -582,8 +603,16 @@ app.get('/api/codigos',
         END AS saldo_codigo,
         ca.alumno_nombre,
         ca.alumno_cedula,
+        ca.nombre1,
+        ca.nombre2,
+        ca.apellido1,
+        ca.apellido2,
+        ca.lugar_expedicion_cedula,
         ca.curso,
         ca.fecha_expedicion,
+        ca.fecha_curso,
+        ca.fecha_acta,
+        ca.ciudad_tramitado,
         ca.creado_en,
         ca.usado_en,
         ca.pagado_en,
@@ -609,13 +638,24 @@ app.post('/api/codigos',
   verificarToken,
   permitirRoles('gerente'),
   (req, res) => {
+    const tipoCodigo = normalizarTipoCodigo(req.body.tipo_codigo);
     const nro = (req.body.nro || '').toString().trim();
     const nci = (req.body.nci || '').toString().trim();
+    const nroInterno = (req.body.nro_interno || '').toString().trim();
+    const nroFolio = (req.body.nro_folio || '').toString().trim();
     const aliadoId = parseInt(req.body.aliado_id, 10);
     const valor = Math.max(0, parseInt(req.body.valor, 10) || 0);
+    const codigoNro = tipoCodigo === 'fundamentacion' ? nro : (nro || `INTERNO:${nroInterno}`);
+    const codigoNci = tipoCodigo === 'fundamentacion' ? nci : (nci || `FOLIO:${nroFolio}`);
 
-    if (!nro || !nci || !aliadoId) {
-      return res.status(400).json({ mensaje: 'Aliado, NRO y NCI son obligatorios' });
+    if (!aliadoId || !codigoNro || !codigoNci) {
+      return res.status(400).json({ mensaje: 'Aliado y codigos son obligatorios' });
+    }
+    if (tipoCodigo === 'fundamentacion' && (!nro || !nci)) {
+      return res.status(400).json({ mensaje: 'NRO y NCI son obligatorios para fundamentacion' });
+    }
+    if (tipoCodigo !== 'fundamentacion' && (!nroInterno || !nroFolio)) {
+      return res.status(400).json({ mensaje: 'Nro interno y Nro folio son obligatorios para seminario/diplomado' });
     }
 
     db.get("SELECT id FROM usuarios WHERE id=? AND rol='aliado'", [aliadoId], (err, aliado) => {
@@ -623,13 +663,13 @@ app.post('/api/codigos',
       if (!aliado) return res.status(400).json({ mensaje: 'Selecciona un usuario con rol aliado' });
 
       db.run(`
-        INSERT INTO codigos_asignados (nro, nci, aliado_id, valor, asignado_por_id)
-        VALUES (?,?,?,?,?)
-      `, [nro, nci, aliadoId, valor, req.usuario.id], function(insertErr) {
+        INSERT INTO codigos_asignados (tipo_codigo, nro, nci, nro_interno, nro_folio, aliado_id, valor, asignado_por_id)
+        VALUES (?,?,?,?,?,?,?,?)
+      `, [tipoCodigo, codigoNro, codigoNci, nroInterno || null, nroFolio || null, aliadoId, valor, req.usuario.id], function(insertErr) {
         if (insertErr) {
           return res.status(400).json({ mensaje: 'Ese NRO o NCI ya existe' });
         }
-        registrarAuditoria(req, 'asignar_codigo', 'codigos_asignados', this.lastID, { nro, nci, aliado_id: aliadoId, valor });
+        registrarAuditoria(req, 'asignar_codigo', 'codigos_asignados', this.lastID, { tipo_codigo: tipoCodigo, nro: codigoNro, nci: codigoNci, nro_interno: nroInterno, nro_folio: nroFolio, aliado_id: aliadoId, valor });
         res.json({ mensaje: 'Codigo asignado correctamente', id: this.lastID });
       });
     });
@@ -643,8 +683,16 @@ app.put('/api/codigos/:id',
     const id = parseInt(req.params.id, 10);
     const alumnoNombre = (req.body.alumno_nombre || '').toString().trim();
     const alumnoCedula = (req.body.alumno_cedula || '').toString().trim();
+    const nombre1 = (req.body.nombre1 || '').toString().trim();
+    const nombre2 = (req.body.nombre2 || '').toString().trim();
+    const apellido1 = (req.body.apellido1 || '').toString().trim();
+    const apellido2 = (req.body.apellido2 || '').toString().trim();
+    const lugarExpedicionCedula = (req.body.lugar_expedicion_cedula || '').toString().trim();
     const curso = (req.body.curso || '').toString().trim();
     const fechaExpedicion = (req.body.fecha_expedicion || '').toString().trim();
+    const fechaCurso = (req.body.fecha_curso || '').toString().trim();
+    const fechaActa = (req.body.fecha_acta || '').toString().trim();
+    const ciudadTramitado = (req.body.ciudad_tramitado || '').toString().trim();
 
     db.get('SELECT * FROM codigos_asignados WHERE id=?', [id], (err, codigo) => {
       if (err) return res.status(500).json({ mensaje: 'Error buscando codigo' });
@@ -653,22 +701,26 @@ app.put('/api/codigos/:id',
       if (req.usuario.rol === 'aliado') {
         if (Number(codigo.aliado_id) !== Number(req.usuario.id)) return res.status(404).json({ mensaje: 'Codigo no encontrado' });
         if (codigo.estado !== 'usado') return res.status(400).json({ mensaje: 'Solo puedes editar datos de codigos ya usados' });
-        if (!alumnoNombre || !alumnoCedula || !curso || !fechaExpedicion) {
-          return res.status(400).json({ mensaje: 'Nombre, cedula, curso y fecha son obligatorios' });
+        if (!validarDatosAlumnoCodigo(req.body)) {
+          return res.status(400).json({ mensaje: 'Faltan datos obligatorios del alumno o del tramite' });
         }
+        const nombreFinal = nombreCompletoCodigo(req.body);
 
         db.run(`
           UPDATE codigos_asignados
-          SET alumno_nombre=?, alumno_cedula=?, curso=?, fecha_expedicion=?
+          SET alumno_nombre=?, alumno_cedula=?, nombre1=?, nombre2=?, apellido1=?, apellido2=?,
+              lugar_expedicion_cedula=?, curso=?, fecha_expedicion=?, fecha_curso=?, fecha_acta=?, ciudad_tramitado=?
           WHERE id=? AND aliado_id=?
-        `, [alumnoNombre, alumnoCedula, curso, fechaExpedicion, id, req.usuario.id], function(updateErr) {
+        `, [nombreFinal, alumnoCedula, nombre1, nombre2 || null, apellido1, apellido2 || null, lugarExpedicionCedula, curso, fechaActa, fechaCurso, fechaActa, ciudadTramitado, id, req.usuario.id], function(updateErr) {
           if (updateErr) return res.status(500).json({ mensaje: 'Error actualizando datos' });
           if (codigo.certificado_id) {
             db.run(`
               UPDATE certificados
-              SET cedula=?, nombre=?, curso=?, fecha_diploma=?, fecha_emision=?
+              SET cedula=?, nombre=?, curso=?, fecha_diploma=?, fecha_emision=?,
+                  nombre1=?, nombre2=?, apellido1=?, apellido2=?, lugar_expedicion_cedula=?,
+                  fecha_curso=?, fecha_acta=?, ciudad_tramitado=?
               WHERE id=?
-            `, [alumnoCedula, alumnoNombre, curso, fechaExpedicion, fechaExpedicion, codigo.certificado_id], () => {});
+            `, [alumnoCedula, nombreFinal, curso, fechaActa, fechaActa, nombre1, nombre2 || null, apellido1, apellido2 || null, lugarExpedicionCedula, fechaCurso, fechaActa, ciudadTramitado, codigo.certificado_id], () => {});
           }
           registrarAuditoria(req, 'editar_datos_codigo_aliado', 'codigos_asignados', id, { alumno_cedula: alumnoCedula });
           res.json({ mensaje: 'Datos del codigo actualizados' });
@@ -678,14 +730,20 @@ app.put('/api/codigos/:id',
 
       const nro = (req.body.nro || '').toString().trim();
       const nci = (req.body.nci || '').toString().trim();
+      const tipoCodigo = normalizarTipoCodigo(req.body.tipo_codigo || codigo.tipo_codigo);
+      const nroInterno = (req.body.nro_interno || '').toString().trim();
+      const nroFolio = (req.body.nro_folio || '').toString().trim();
       const aliadoId = parseInt(req.body.aliado_id, 10);
       const valor = Math.max(0, parseInt(req.body.valor, 10) || 0);
+      const codigoNro = tipoCodigo === 'fundamentacion' ? nro : (nro || `INTERNO:${nroInterno}`);
+      const codigoNci = tipoCodigo === 'fundamentacion' ? nci : (nci || `FOLIO:${nroFolio}`);
+      const nombreFinal = codigo.estado === 'usado' ? nombreCompletoCodigo(req.body) : (codigo.alumno_nombre || null);
 
-      if (!nro || !nci || !aliadoId) {
-        return res.status(400).json({ mensaje: 'Aliado, NRO y NCI son obligatorios' });
+      if (!codigoNro || !codigoNci || !aliadoId) {
+        return res.status(400).json({ mensaje: 'Aliado y codigos son obligatorios' });
       }
-      if (codigo.estado === 'usado' && (!alumnoNombre || !alumnoCedula || !curso || !fechaExpedicion)) {
-        return res.status(400).json({ mensaje: 'Los datos del alumno son obligatorios si el codigo ya fue usado' });
+      if (codigo.estado === 'usado' && !validarDatosAlumnoCodigo(req.body)) {
+        return res.status(400).json({ mensaje: 'Faltan datos obligatorios del alumno o del tramite' });
       }
 
       db.get("SELECT id FROM usuarios WHERE id=? AND rol='aliado'", [aliadoId], (aliadoErr, aliado) => {
@@ -699,31 +757,44 @@ app.put('/api/codigos/:id',
 
           db.run(`
             UPDATE codigos_asignados
-            SET nro=?,
+            SET tipo_codigo=?,
+                nro=?,
                 nci=?,
+                nro_interno=?,
+                nro_folio=?,
                 aliado_id=?,
                 valor=?,
                 estado_pago=?,
                 alumno_nombre=CASE WHEN estado='usado' THEN ? ELSE alumno_nombre END,
                 alumno_cedula=CASE WHEN estado='usado' THEN ? ELSE alumno_cedula END,
+                nombre1=CASE WHEN estado='usado' THEN ? ELSE nombre1 END,
+                nombre2=CASE WHEN estado='usado' THEN ? ELSE nombre2 END,
+                apellido1=CASE WHEN estado='usado' THEN ? ELSE apellido1 END,
+                apellido2=CASE WHEN estado='usado' THEN ? ELSE apellido2 END,
+                lugar_expedicion_cedula=CASE WHEN estado='usado' THEN ? ELSE lugar_expedicion_cedula END,
                 curso=CASE WHEN estado='usado' THEN ? ELSE curso END,
                 fecha_expedicion=CASE WHEN estado='usado' THEN ? ELSE fecha_expedicion END,
+                fecha_curso=CASE WHEN estado='usado' THEN ? ELSE fecha_curso END,
+                fecha_acta=CASE WHEN estado='usado' THEN ? ELSE fecha_acta END,
+                ciudad_tramitado=CASE WHEN estado='usado' THEN ? ELSE ciudad_tramitado END,
                 pagado_en=?
             WHERE id=?
-          `, [nro, nci, aliadoId, valor, nuevoEstadoPago, alumnoNombre, alumnoCedula, curso, fechaExpedicion, pagadoEn, id], function(updateErr) {
+          `, [tipoCodigo, codigoNro, codigoNci, nroInterno || null, nroFolio || null, aliadoId, valor, nuevoEstadoPago, nombreFinal, alumnoCedula, nombre1, nombre2 || null, apellido1, apellido2 || null, lugarExpedicionCedula, curso, fechaActa, fechaCurso, fechaActa, ciudadTramitado, pagadoEn, id], function(updateErr) {
             if (updateErr) return res.status(400).json({ mensaje: 'No se pudo actualizar. Revisa si NRO o NCI ya existen.' });
             if (this.changes === 0) return res.status(404).json({ mensaje: 'Codigo no encontrado' });
 
             if (codigo.certificado_id) {
               db.run(`
                 UPDATE certificados
-                SET cedula=?, nombre=?, curso=?, fecha_diploma=?, fecha_emision=?, nro=?, nci=?
+                SET cedula=?, nombre=?, curso=?, fecha_diploma=?, fecha_emision=?, nro=?, nci=?,
+                    tipo_codigo=?, nro_interno=?, nro_folio=?, nombre1=?, nombre2=?, apellido1=?, apellido2=?,
+                    lugar_expedicion_cedula=?, fecha_curso=?, fecha_acta=?, ciudad_tramitado=?
                 WHERE id=?
-              `, [alumnoCedula, alumnoNombre, curso, fechaExpedicion, fechaExpedicion, nro, nci, codigo.certificado_id], () => {});
+              `, [alumnoCedula, nombreFinal, curso, fechaActa, fechaActa, codigoNro, codigoNci, tipoCodigo, nroInterno || null, nroFolio || null, nombre1, nombre2 || null, apellido1, apellido2 || null, lugarExpedicionCedula, fechaCurso, fechaActa, ciudadTramitado, codigo.certificado_id], () => {});
             }
             db.run('UPDATE codigos_pagos SET aliado_id=? WHERE codigo_id=?', [aliadoId, id], () => {});
 
-            registrarAuditoria(req, 'editar_codigo', 'codigos_asignados', id, { nro, nci, aliado_id: aliadoId, valor });
+            registrarAuditoria(req, 'editar_codigo', 'codigos_asignados', id, { tipo_codigo: tipoCodigo, nro: codigoNro, nci: codigoNci, nro_interno: nroInterno, nro_folio: nroFolio, aliado_id: aliadoId, valor });
             res.json({ mensaje: 'Codigo actualizado' });
           });
         });
@@ -737,13 +808,20 @@ app.put('/api/codigos/:id/usar',
   permitirRoles('gerente','aliado'),
   (req, res) => {
     const id = parseInt(req.params.id, 10);
-    const alumnoNombre = (req.body.alumno_nombre || '').toString().trim();
     const alumnoCedula = (req.body.alumno_cedula || '').toString().trim();
+    const nombre1 = (req.body.nombre1 || '').toString().trim();
+    const nombre2 = (req.body.nombre2 || '').toString().trim();
+    const apellido1 = (req.body.apellido1 || '').toString().trim();
+    const apellido2 = (req.body.apellido2 || '').toString().trim();
+    const lugarExpedicionCedula = (req.body.lugar_expedicion_cedula || '').toString().trim();
     const curso = (req.body.curso || '').toString().trim();
-    const fechaExpedicion = (req.body.fecha_expedicion || '').toString().trim();
+    const fechaCurso = (req.body.fecha_curso || '').toString().trim();
+    const fechaActa = (req.body.fecha_acta || '').toString().trim();
+    const ciudadTramitado = (req.body.ciudad_tramitado || '').toString().trim();
+    const alumnoNombre = nombreCompletoCodigo(req.body);
 
-    if (!alumnoNombre || !alumnoCedula || !curso || !fechaExpedicion) {
-      return res.status(400).json({ mensaje: 'Nombre, cedula, curso y fecha de expedicion son obligatorios' });
+    if (!validarDatosAlumnoCodigo(req.body)) {
+      return res.status(400).json({ mensaje: 'Faltan datos obligatorios del alumno o del tramite' });
     }
 
     const params = req.usuario.rol === 'aliado' ? [id, req.usuario.id] : [id];
@@ -759,22 +837,34 @@ app.put('/api/codigos/:id/usar',
       db.serialize(() => {
         db.run(`
           INSERT INTO certificados
-            (estudiante_id, cedula, nombre, curso, fecha_diploma, tipo, archivo_pdf, fecha_subida, curso_id, fecha_emision, nro, nci, codigo_asignado_id)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            (estudiante_id, cedula, nombre, curso, fecha_diploma, tipo, archivo_pdf, fecha_subida, curso_id, fecha_emision, nro, nci, codigo_asignado_id,
+             tipo_codigo, nro_interno, nro_folio, nombre1, nombre2, apellido1, apellido2, lugar_expedicion_cedula, fecha_curso, fecha_acta, ciudad_tramitado)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           null,
           alumnoCedula,
           alumnoNombre,
           curso,
-          fechaExpedicion,
+          fechaActa,
           'codigo',
           null,
           new Date().toISOString(),
           null,
-          fechaExpedicion,
+          fechaActa,
           codigo.nro,
           codigo.nci,
-          id
+          id,
+          codigo.tipo_codigo || 'fundamentacion',
+          codigo.nro_interno || null,
+          codigo.nro_folio || null,
+          nombre1,
+          nombre2 || null,
+          apellido1,
+          apellido2 || null,
+          lugarExpedicionCedula,
+          fechaCurso,
+          fechaActa,
+          ciudadTramitado
         ], function(certErr) {
           if (certErr) return res.status(500).json({ mensaje: 'Error creando certificado del codigo' });
 
@@ -784,12 +874,20 @@ app.put('/api/codigos/:id/usar',
             SET estado='usado',
                 alumno_nombre=?,
                 alumno_cedula=?,
+                nombre1=?,
+                nombre2=?,
+                apellido1=?,
+                apellido2=?,
+                lugar_expedicion_cedula=?,
                 curso=?,
                 fecha_expedicion=?,
+                fecha_curso=?,
+                fecha_acta=?,
+                ciudad_tramitado=?,
                 certificado_id=?,
                 usado_en=datetime('now','localtime')
             WHERE id=? AND estado='disponible'
-          `, [alumnoNombre, alumnoCedula, curso, fechaExpedicion, certificadoId, id], function(updateErr) {
+          `, [alumnoNombre, alumnoCedula, nombre1, nombre2 || null, apellido1, apellido2 || null, lugarExpedicionCedula, curso, fechaActa, fechaCurso, fechaActa, ciudadTramitado, certificadoId, id], function(updateErr) {
             if (updateErr) return res.status(500).json({ mensaje: 'Error usando codigo' });
             if (this.changes === 0) return res.status(400).json({ mensaje: 'Este codigo ya fue usado' });
             registrarAuditoria(req, 'usar_codigo', 'codigos_asignados', id, {
@@ -2378,14 +2476,27 @@ app.get('/api/validar/:consulta', (req, res) => {
       cert.archivo_pdf,
       cert.fecha_emision AS fecha_diploma,
       cert.nro,
-      cert.nci
+      cert.nci,
+      cert.tipo_codigo,
+      cert.nro_interno,
+      cert.nro_folio,
+      cert.nombre1,
+      cert.nombre2,
+      cert.apellido1,
+      cert.apellido2,
+      cert.lugar_expedicion_cedula,
+      cert.fecha_curso,
+      cert.fecha_acta,
+      cert.ciudad_tramitado
     FROM certificados cert
     WHERE TRIM(cert.cedula) = ?
        OR TRIM(IFNULL(cert.nro, '')) = ?
        OR TRIM(IFNULL(cert.nci, '')) = ?
+       OR TRIM(IFNULL(cert.nro_interno, '')) = ?
+       OR TRIM(IFNULL(cert.nro_folio, '')) = ?
     ORDER BY cert.fecha_emision DESC
   `,
-  [consulta, consulta, consulta],
+  [consulta, consulta, consulta, consulta, consulta],
   (_, certs) => {
     if(!certs || certs.length === 0){
       return res.json({ valido:false });
