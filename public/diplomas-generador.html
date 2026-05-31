@@ -10,10 +10,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    /* Diploma en horizontal (A4 apaisado): coincide con plantilla física típica */
+    /* Diploma en carta horizontal: coincide con la plantilla fisica */
     :root{
-      --dp-page-w: 297mm;
-      --dp-page-h: 210mm;
+      --dp-page-w: 279.4mm;
+      --dp-page-h: 215.9mm;
     }
     .vf-wrap{
       border:1px solid rgba(10,59,120,.10);
@@ -145,8 +145,8 @@
         page-break-inside:avoid;
       }
       @page{
-        size:A4 landscape;
-        margin:8mm;
+        size: letter landscape;
+        margin:0;
       }
     }
   </style>
@@ -239,7 +239,7 @@
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
                   <h5 class="vf-title mb-1">Generador de Diplomas (PDF)</h5>
-                  <p class="vf-subtitle mb-0">Sube la plantilla, completa datos y queda listo para imprimir. <span class="text-primary">Vista e impresión en horizontal (A4 apaisado).</span></p>
+                  <p class="vf-subtitle mb-0">Sube la plantilla, completa datos y queda listo para imprimir. <span class="text-primary">Vista e impresion en carta horizontal.</span></p>
                 </div>
               </div>
             </div>
@@ -269,7 +269,7 @@
                     </label>
                   </div>
                   <div class="form-text">
-                    Activa esta opción para ocultar el PDF de fondo y sacar únicamente los textos sobre hoja <strong>A4 horizontal</strong>.
+                    Activa esta opcion para ocultar el PDF de fondo y sacar unicamente los textos sobre hoja <strong>carta horizontal</strong>.
                   </div>
                 </div>
               </div>
@@ -642,7 +642,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     wrap.style.height = '';
-    wrap.style.width = '297mm';
+    wrap.style.width = '279.4mm';
 
     let loading;
     if(typeof source === 'string'){
@@ -654,7 +654,7 @@
     const doc = await loading.promise;
     const page = await doc.getPage(1);
 
-    // Calcular escala para que el ancho del PDF encaje con el wrapper (A4 horizontal ~297mm)
+    // Calcular escala para que el ancho del PDF encaje con el wrapper (carta horizontal ~279.4mm)
     const targetWidth = wrap.getBoundingClientRect().width;
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = targetWidth / unscaledViewport.width;
@@ -683,11 +683,11 @@
       dpi.canvas.style.display = dpi.soloTexto ? 'none' : 'block';
     }
     if(dpi.previewWrap){
-      dpi.previewWrap.style.minHeight = '210mm';
+      dpi.previewWrap.style.minHeight = '215.9mm';
     }
     if(dpi.msgPos){
       dpi.msgPos.textContent = dpi.soloTexto
-        ? 'Modo solo texto activo: se imprimen únicamente los textos sobre hoja A4 horizontal.'
+        ? 'Modo solo texto activo: se imprimen unicamente los textos sobre hoja carta horizontal.'
         : dpi.msgPos.textContent;
     }
   }
@@ -991,9 +991,9 @@
       if(wasAdjust) preview.classList.add('dp-adjust');
 
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 279.4, 215.9);
       const blob = pdf.output('blob');
 
       const fd = new FormData();
