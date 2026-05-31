@@ -308,4 +308,21 @@ db.run(`
   )
 `);
 
+/* =========================
+   NOTAS DE COBRO
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS cobros_notas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    estudiante_id INTEGER NOT NULL,
+    usuario_id INTEGER,
+    motivo TEXT,
+    nota TEXT NOT NULL,
+    proximo_contacto TEXT,
+    creado_en TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+  )
+`);
+
 module.exports = db;

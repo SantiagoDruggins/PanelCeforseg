@@ -5,6 +5,21 @@
 <title>Deudores / Morosos - CEFORSEG</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+  .ai-box{border:1px solid #d9e2ef;border-radius:8px;background:#fff;box-shadow:0 12px 28px rgba(10,59,120,.08)}
+  .ai-output{white-space:normal;line-height:1.55;font-size:14px}
+  .ai-output h5{font-size:15px;color:#0a3b78;font-weight:800;margin:14px 0 8px}
+  .ai-output p{margin:0 0 10px}
+  .ai-output ul{margin:0 0 12px;padding-left:18px}
+  @media print{
+    .sidebar,.no-print{display:none!important}
+    .content{padding:0!important}
+    body{background:#fff!important}
+    .card{box-shadow:none!important;border:0!important}
+    .print-title{display:block!important}
+  }
+</style>
 </head>
 
 <body>
@@ -18,9 +33,8 @@ if(!localStorage.getItem('token')) location.href='/login';
 <script>
 if (bloquearModuloAliado('Deudores / Morosos')) throw new Error('Acceso aliado bloqueado');
 const token = localStorage.getItem('token');
-function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
-
 let ultimaLista = [];
+let estudianteNotaId = null;
 
 fetch('/layout.html')
 .then(r=>r.text())
@@ -30,51 +44,141 @@ fetch('/layout.html')
   const content = document.querySelector('.content');
 
   content.innerHTML = `
-    <h3 class="mb-3">📋 Deudores y morosos</h3>
-    <p class="text-muted mb-4">Lista para cobros masivos. Opcional: filtrar por &quot;moroso a partir de&quot; (último abono antes de esa fecha).</p>
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h3 class="mb-1"><i class="bi bi-clipboard2-pulse me-2"></i>Sesion de cobro</h3>
+        <p class="text-muted mb-0">Gestion de llamadas, notas, prioridades e informe IA para cartera.</p>
+      </div>
+      <div class="d-flex gap-2 no-print">
+        <button class="btn btn-outline-secondary" onclick="imprimirReporte()"><i class="bi bi-printer me-1"></i>Imprimir tabla</button>
+        <button class="btn btn-primary" onclick="generarReporteIA()"><i class="bi bi-stars me-1"></i>Reporte IA</button>
+      </div>
+    </div>
 
-    <div class="card shadow-sm mb-4">
+    <div class="card shadow-sm mb-3 no-print">
       <div class="card-body">
         <div class="row g-3 align-items-end">
-          <div class="col-md-4">
-            <label class="form-label">Moroso a partir de (último abono antes de)</label>
+          <div class="col-md-3">
+            <label class="form-label">Moroso a partir de</label>
             <input type="date" id="morosoDesde" class="form-control">
-            <small class="text-muted">Dejar vacío = todos los deudores. Con fecha = solo quienes no han pagado desde antes de esa fecha.</small>
           </div>
-          <div class="col-md-2">
-            <button class="btn btn-primary w-100" onclick="buscar()">Buscar</button>
+          <div class="col-md-4">
+            <label class="form-label">Buscar</label>
+            <input id="q" class="form-control" placeholder="Nombre, cedula, telefono o nota" oninput="pintarTabla()">
           </div>
-          <div class="col-md-2">
-            <button class="btn btn-outline-success w-100" onclick="exportarCSV()" id="btnExportar" disabled>Exportar CSV</button>
+          <div class="col-md-2 d-grid">
+            <button class="btn btn-primary" onclick="buscar()">Buscar</button>
+          </div>
+          <div class="col-md-3 d-grid">
+            <button class="btn btn-outline-success" onclick="exportarCSV()" id="btnExportar" disabled>Exportar CSV</button>
           </div>
         </div>
       </div>
     </div>
 
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body">
+          <small>Total deudores</small><h4 id="kDeudores" class="mb-0">0</h4>
+        </div></div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body">
+          <small>Deuda total</small><h4 id="kDeuda" class="text-danger mb-0">$0 COP</h4>
+        </div></div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body">
+          <small>Sin gestion</small><h4 id="kSinGestion" class="mb-0">0</h4>
+        </div></div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body">
+          <small>Promedio deuda</small><h4 id="kPromedio" class="mb-0">$0 COP</h4>
+        </div></div>
+      </div>
+    </div>
+
+    <div id="aiPanel" class="ai-box mb-3 d-none">
+      <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-stars me-1"></i>Reporte IA de cobro</strong>
+        <span class="badge text-bg-light" id="aiModo">IA</span>
+      </div>
+      <div class="p-3 ai-output" id="aiOutput"></div>
+    </div>
+
+    <h4 class="print-title d-none mb-3">Reporte de deudores CEFORSEG</h4>
     <div class="card shadow-sm">
       <div class="card-body p-0">
         <div class="table-responsive">
-          <table class="table table-hover mb-0">
+          <table class="table table-hover mb-0 align-middle" id="tablaPrint">
             <thead class="table-light">
               <tr>
                 <th>Nombre</th>
-                <th>Cédula</th>
-                <th>Teléfono</th>
-                <th>Email</th>
-                <th>Último abono</th>
+                <th>Cedula</th>
+                <th>Telefono</th>
+                <th>Ultimo abono</th>
                 <th>Deuda</th>
                 <th>Cursos con saldo</th>
-                <th></th>
+                <th>Ultima razon / nota</th>
+                <th>Proximo contacto</th>
+                <th class="no-print">Gestion</th>
               </tr>
             </thead>
             <tbody id="tabla">
-              <tr><td colspan="8" class="text-center text-muted">Indica opcionalmente la fecha y pulsa Buscar.</td></tr>
+              <tr><td colspan="9" class="text-center text-muted">Pulsa Buscar para cargar cartera.</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
+
+    <div class="modal fade" id="modalNota" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Registrar gestion de cobro</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="notaEstudiante" class="fw-bold mb-3"></div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Razon indicada</label>
+                <select id="motivoNota" class="form-select">
+                  <option value="Promete pagar">Promete pagar</option>
+                  <option value="Solicita plazo">Solicita plazo</option>
+                  <option value="No contesta">No contesta</option>
+                  <option value="Numero equivocado">Numero equivocado</option>
+                  <option value="Dificultad economica">Dificultad economica</option>
+                  <option value="Reclamo o revision">Reclamo o revision</option>
+                  <option value="Otra razon">Otra razon</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Proximo contacto</label>
+                <input type="date" id="proximoContacto" class="form-control">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Nota de llamada</label>
+                <textarea id="notaCobro" class="form-control" rows="4" placeholder="Ej: dice que paga el viernes, pidio plazo, no contesto, envio comprobante pendiente..." required></textarea>
+              </div>
+            </div>
+            <div class="mt-3">
+              <h6>Historial reciente</h6>
+              <div id="historialNotas" class="small text-muted">Cargando...</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button class="btn btn-primary" onclick="guardarNota()">Guardar nota</button>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
+
+  buscar();
 });
 
 async function buscar(){
@@ -85,66 +189,169 @@ async function buscar(){
   const res = await fetch('/api/estudiantes/deudores?' + params, { headers: { Authorization: 'Bearer ' + token } });
   const data = await res.json();
   ultimaLista = data || [];
+  pintarTabla();
+}
 
+function listaFiltrada(){
+  const q = (document.getElementById('q')?.value || '').toLowerCase().trim();
+  if(!q) return ultimaLista;
+  return ultimaLista.filter(d => [d.nombre,d.cedula,d.telefono,d.email,d.ultima_nota,d.ultimo_motivo,d.detalle_cursos].some(v => String(v || '').toLowerCase().includes(q)));
+}
+
+function pintarTabla(){
+  const lista = listaFiltrada();
   const tbody = document.getElementById('tabla');
   const btnExportar = document.getElementById('btnExportar');
+  const total = lista.reduce((s,d)=>s + (Number(d.total_deuda)||0), 0);
+  document.getElementById('kDeudores').textContent = lista.length;
+  document.getElementById('kDeuda').textContent = formatCOP(total);
+  document.getElementById('kSinGestion').textContent = lista.filter(d => !d.ultima_nota).length;
+  document.getElementById('kPromedio').textContent = formatCOP(lista.length ? Math.round(total / lista.length) : 0);
 
-  if (ultimaLista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay deudores' + (morosoDesde ? ' morosos desde antes de ' + morosoDesde : '') + '.</td></tr>';
+  if (lista.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No hay deudores con estos filtros.</td></tr>';
     btnExportar.disabled = true;
     return;
   }
 
   btnExportar.disabled = false;
-  tbody.innerHTML = ultimaLista.map(d => {
+  tbody.innerHTML = lista.map(d => {
     const ultimo = d.ultimo_abono ? (d.ultimo_abono + '').slice(0, 10) : 'Nunca';
+    const nota = d.ultima_nota ? `${d.ultimo_motivo || 'Gestion'}: ${d.ultima_nota}` : 'Sin gestion';
     return `
       <tr>
-        <td>${escapeHtml(d.nombre || '—')}</td>
-        <td>${escapeHtml(d.cedula || '—')}</td>
-        <td>${escapeHtml(d.telefono || '—')}</td>
-        <td>${escapeHtml(d.email || '—')}</td>
+        <td><strong>${escapeHtml(d.nombre || '-')}</strong></td>
+        <td>${escapeHtml(d.cedula || '-')}</td>
+        <td>${escapeHtml(d.telefono || '-')}</td>
         <td>${ultimo}</td>
-        <td>${formatCOP(d.total_deuda)}</td>
-        <td class="small">${escapeHtml((d.detalle_cursos || '—').toString().slice(0, 60))}${(d.detalle_cursos || '').length > 60 ? '…' : ''}</td>
-        <td><a href="/estudiante-ficha?id=${d.id}" class="btn btn-sm btn-outline-primary">Ficha</a></td>
+        <td><strong class="text-danger">${formatCOP(d.total_deuda)}</strong></td>
+        <td class="small">${escapeHtml((d.detalle_cursos || '-').toString().slice(0, 80))}${(d.detalle_cursos || '').length > 80 ? '...' : ''}</td>
+        <td class="small">${escapeHtml(nota).slice(0, 120)}</td>
+        <td>${escapeHtml(d.proximo_contacto || '-')}</td>
+        <td class="no-print">
+          <div class="d-flex flex-wrap gap-1">
+            <button class="btn btn-sm btn-outline-primary" onclick="abrirNota(${d.id})">Nota</button>
+            <a href="/estudiante-ficha?id=${d.id}" class="btn btn-sm btn-outline-secondary">Ficha</a>
+          </div>
+        </td>
       </tr>
     `;
   }).join('');
 }
 
-function escapeHtml(s){
-  if (!s) return '';
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+async function abrirNota(id){
+  estudianteNotaId = id;
+  const est = ultimaLista.find(d => Number(d.id) === Number(id));
+  document.getElementById('notaEstudiante').textContent = `${est?.nombre || ''} - ${est?.cedula || ''} - ${est?.telefono || ''}`;
+  document.getElementById('notaCobro').value = '';
+  document.getElementById('proximoContacto').value = '';
+  await cargarNotas(id);
+  new bootstrap.Modal(document.getElementById('modalNota')).show();
+}
+
+async function cargarNotas(id){
+  const res = await fetch('/api/estudiantes/' + id + '/cobros-notas', { headers:{ Authorization:'Bearer ' + token } });
+  const notas = await res.json();
+  const box = document.getElementById('historialNotas');
+  if(!notas.length){ box.innerHTML = '<div class="text-muted">Sin notas registradas.</div>'; return; }
+  box.innerHTML = notas.map(n => `
+    <div class="border-bottom py-2">
+      <strong>${escapeHtml(n.motivo || 'Gestion')}</strong>
+      <span class="text-muted"> ${escapeHtml((n.creado_en || '').slice(0,16))} · ${escapeHtml(n.usuario || '')}</span>
+      <div>${escapeHtml(n.nota || '')}</div>
+      ${n.proximo_contacto ? `<div class="text-primary">Proximo contacto: ${escapeHtml(n.proximo_contacto)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function guardarNota(){
+  if(!estudianteNotaId) return;
+  const nota = document.getElementById('notaCobro').value.trim();
+  if(!nota){ alert('Escribe la nota de la llamada.'); return; }
+  const body = {
+    motivo: document.getElementById('motivoNota').value,
+    nota,
+    proximo_contacto: document.getElementById('proximoContacto').value
+  };
+  const res = await fetch('/api/estudiantes/' + estudianteNotaId + '/cobros-notas', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + token },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  alert(data.mensaje || 'Guardado');
+  if(res.ok){
+    bootstrap.Modal.getInstance(document.getElementById('modalNota')).hide();
+    buscar();
+  }
+}
+
+async function generarReporteIA(){
+  const lista = listaFiltrada();
+  if(!lista.length){ alert('Primero carga deudores.'); return; }
+  const panel = document.getElementById('aiPanel');
+  const out = document.getElementById('aiOutput');
+  panel.classList.remove('d-none');
+  out.innerHTML = '<div class="text-muted">Generando reporte...</div>';
+  const res = await fetch('/api/estudiantes/deudores/ia-reporte', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + token },
+    body: JSON.stringify({ deudores: lista })
+  });
+  const data = await res.json();
+  document.getElementById('aiModo').textContent = data.modo === 'gemini' ? 'Gemini' : 'Local';
+  out.innerHTML = markdownBasico(data.analisis || data.mensaje || 'Sin respuesta');
+}
+
+function imprimirReporte(){
+  window.print();
 }
 
 function exportarCSV(){
-  if (ultimaLista.length === 0) return;
+  const lista = listaFiltrada();
+  if (lista.length === 0) return;
   const B = '\uFEFF';
   const sep = ';';
   const enc = (v) => '"' + String(v || '').replace(/"/g, '""') + '"';
   const filas = [
-    ['Nombre','Cédula','Teléfono','Email','Último abono','Deuda (COP)','Cursos con saldo'].join(sep),
-    ...ultimaLista.map(d => [
-      enc(d.nombre),
-      enc(d.cedula),
-      enc(d.telefono),
-      enc(d.email),
+    ['Nombre','Cedula','Telefono','Email','Ultimo abono','Deuda (COP)','Cursos con saldo','Ultima razon','Ultima nota','Proximo contacto'].join(sep),
+    ...lista.map(d => [
+      enc(d.nombre), enc(d.cedula), enc(d.telefono), enc(d.email),
       enc(d.ultimo_abono ? (d.ultimo_abono+'').slice(0,10) : 'Nunca'),
-      enc(d.total_deuda),
-      enc(d.detalle_cursos)
+      enc(d.total_deuda), enc(d.detalle_cursos), enc(d.ultimo_motivo), enc(d.ultima_nota), enc(d.proximo_contacto)
     ].join(sep))
   ];
-  const csv = B + filas.join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([B + filas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'deudores-morosos-' + (document.getElementById('morosoDesde').value || 'todos') + '.csv';
+  a.download = 'reporte-cobro-' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+function markdownBasico(texto){
+  const safe = escapeHtml(texto || '')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>');
+  return safe.split(/\n{2,}/).map(block => {
+    const clean = block.trim();
+    if(!clean) return '';
+    if(/^<li>/.test(clean)) return `<ul>${clean}</ul>`;
+    if(/^<strong>.*<\/strong>$/.test(clean) && clean.length < 90) return `<h5>${clean.replace(/<\/?strong>/g, '')}</h5>`;
+    return `<p>${clean.replace(/\n/g, '<br>')}</p>`;
+  }).join('');
+}
+
+function escapeHtml(s){
+  const div = document.createElement('div');
+  div.textContent = String(s ?? '');
+  return div.innerHTML;
+}
+
+function formatCOP(n){
+  return '$' + Number(n || 0).toLocaleString('es-CO') + ' COP';
+}
 </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

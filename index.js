@@ -253,6 +253,33 @@ function crearAnalisisLocal(data) {
   return `${utilidadTxt}\n${tendencia}\nDeuda total activa: ${data.deuda.total.toLocaleString('es-CO')} COP en ${data.deuda.estudiantes} estudiantes.\nPrioridad de cobro: ${deudaTxt}`;
 }
 
+function crearAnalisisCobrosLocal(data) {
+  const lista = data.deudores || [];
+  const total = lista.reduce((sum, d) => sum + (Number(d.total_deuda) || 0), 0);
+  const top = lista
+    .slice()
+    .sort((a, b) => (Number(b.total_deuda) || 0) - (Number(a.total_deuda) || 0))
+    .slice(0, 5);
+  const sinContacto = lista.filter(d => !d.ultima_nota).length;
+  const prioridad = top.map((d, i) =>
+    `${i + 1}. ${d.nombre} (${d.cedula || 'sin cedula'}) debe ${Number(d.total_deuda || 0).toLocaleString('es-CO')} COP. Telefono: ${d.telefono || 'sin telefono'}. Ultima gestion: ${d.ultima_nota || 'sin nota registrada'}.`
+  ).join('\n') || 'No hay deudores para priorizar.';
+
+  return `**Resumen de cobranza**
+Hay ${lista.length} estudiantes con saldo pendiente por ${total.toLocaleString('es-CO')} COP. ${sinContacto} no tienen nota de gestion registrada.
+
+**Prioridad de llamadas**
+${prioridad}
+
+**Guion sugerido**
+Buenos dias, le hablamos de CEFORSEG para revisar el saldo pendiente de su curso. Queremos confirmar su situacion actual y acordar una fecha realista de pago o abono.
+
+**Acciones**
+- Llamar primero a quienes tienen mayor deuda y no tienen nota reciente.
+- Registrar siempre la razon indicada por el cliente.
+- Agendar proximo contacto cuando prometan pago o pidan plazo.`;
+}
+
 /* =====================================================
    RUTAS HTML
 ===================================================== */
@@ -1198,6 +1225,10 @@ app.get('/api/estudiantes/deudores',
         e.email,
         SUM(ec.saldo) AS total_deuda,
         (SELECT MAX(fecha) FROM abonos WHERE estudiante_id = e.id) AS ultimo_abono,
+        (SELECT cn.nota FROM cobros_notas cn WHERE cn.estudiante_id = e.id ORDER BY cn.creado_en DESC LIMIT 1) AS ultima_nota,
+        (SELECT cn.motivo FROM cobros_notas cn WHERE cn.estudiante_id = e.id ORDER BY cn.creado_en DESC LIMIT 1) AS ultimo_motivo,
+        (SELECT cn.proximo_contacto FROM cobros_notas cn WHERE cn.estudiante_id = e.id ORDER BY cn.creado_en DESC LIMIT 1) AS proximo_contacto,
+        (SELECT cn.creado_en FROM cobros_notas cn WHERE cn.estudiante_id = e.id ORDER BY cn.creado_en DESC LIMIT 1) AS ultima_gestion,
         GROUP_CONCAT(c.nombre || ' $' || ec.saldo, ' · ') AS detalle_cursos
       FROM estudiantes e
       JOIN estudiante_cursos ec ON ec.estudiante_id = e.id AND ec.saldo > 0
@@ -1216,6 +1247,110 @@ app.get('/api/estudiantes/deudores',
       res.json(list);
     });
   });
+
+app.get('/api/estudiantes/:id/cobros-notas',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    db.all(`
+      SELECT cn.id, cn.estudiante_id, cn.motivo, cn.nota, cn.proximo_contacto, cn.creado_en,
+             u.usuario AS usuario
+      FROM cobros_notas cn
+      LEFT JOIN usuarios u ON u.id = cn.usuario_id
+      WHERE cn.estudiante_id=?
+      ORDER BY cn.creado_en DESC
+      LIMIT 30
+    `, [req.params.id], (err, rows) => {
+      if (err) return res.status(500).json({ mensaje: 'Error cargando notas' });
+      res.json(rows || []);
+    });
+  }
+);
+
+app.post('/api/estudiantes/:id/cobros-notas',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  (req, res) => {
+    const estudianteId = parseInt(req.params.id, 10);
+    const motivo = (req.body.motivo || '').toString().trim();
+    const nota = (req.body.nota || '').toString().trim();
+    const proximoContacto = (req.body.proximo_contacto || '').toString().trim();
+
+    if (!nota) return res.status(400).json({ mensaje: 'La nota es obligatoria' });
+
+    db.get('SELECT id FROM estudiantes WHERE id=?', [estudianteId], (err, estudiante) => {
+      if (err) return res.status(500).json({ mensaje: 'Error buscando estudiante' });
+      if (!estudiante) return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+
+      db.run(`
+        INSERT INTO cobros_notas (estudiante_id, usuario_id, motivo, nota, proximo_contacto)
+        VALUES (?,?,?,?,?)
+      `, [estudianteId, req.usuario.id, motivo || null, nota, proximoContacto || null], function(insertErr) {
+        if (insertErr) return res.status(500).json({ mensaje: 'Error guardando nota' });
+        registrarAuditoria(req, 'registrar_nota_cobro', 'cobros_notas', this.lastID, { estudiante_id: estudianteId, motivo });
+        res.json({ mensaje: 'Nota de cobro guardada', id: this.lastID });
+      });
+    });
+  }
+);
+
+app.post('/api/estudiantes/deudores/ia-reporte',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const deudores = Array.isArray(req.body.deudores) ? req.body.deudores.slice(0, 80) : [];
+      const data = { generado_en: new Date().toISOString(), deudores };
+      const local = crearAnalisisCobrosLocal(data);
+      const apiKey = process.env.GEMINI_API_KEY;
+      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+      if (!apiKey) {
+        return res.json({ modo: 'local', analisis: local, mensaje: 'Configura GEMINI_API_KEY para activar Gemini AI.', data });
+      }
+
+      const prompt = `
+Eres asesor de cobranza educativa para CEFORSEG. Crea un reporte ejecutivo en espanol claro.
+No inventes datos. Usa nombres, cedulas, telefonos, deuda, ultimo abono y notas de gestion.
+Formato:
+**Resumen**
+- deuda total, cantidad de estudiantes y riesgo general.
+**Prioridad de llamadas**
+- tabla corta en texto con nombre, cedula, telefono, deuda y razon/nota.
+**Guion de llamada**
+- texto breve y profesional.
+**Plan de seguimiento**
+- acciones concretas para secretaria.
+
+Datos:
+${JSON.stringify(data, null, 2)}
+`;
+
+      const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2 }
+        })
+      });
+
+      const geminiJson = await geminiRes.json();
+      if (!geminiRes.ok) {
+        return res.status(502).json({ modo: 'local', analisis: local, mensaje: geminiJson.error?.message || 'Gemini no respondio correctamente.', data });
+      }
+
+      const parts = (((geminiJson.candidates || [])[0] || {}).content || {}).parts || [];
+      res.json({ modo: 'gemini', modelo: model, analisis: parts.map(p => p.text || '').join('\n').trim() || local, data });
+    } catch (err) {
+      console.error('Error en reporte IA de cobros:', err);
+      res.status(500).json({ mensaje: 'Error generando reporte IA' });
+    }
+  }
+);
 
 /* =====================================================
    LISTAR ESTUDIANTES
