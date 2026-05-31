@@ -41,7 +41,8 @@
     .dp-preview-wrap{
       width:var(--dp-page-w);
       max-width:100%;
-      height:var(--dp-page-h);
+      height:auto;
+      aspect-ratio:279.4 / 215.9;
       margin:0 auto;
       position:relative;
       background:#fff;
@@ -51,9 +52,10 @@
     }
     .dp-canvas{
       display:block;
+      position:absolute;
+      inset:0;
       width:100%;
       height:100%;
-      object-fit:fill;
     }
     .dp-overlay-layer{
       position:absolute;
@@ -419,7 +421,7 @@
 
                 <div class="col-lg-7 dp-print-col">
                   <div class="dp-preview-wrap mt-1" id="previewWrap">
-                    <canvas id="pdfCanvas"></canvas>
+                    <canvas class="dp-canvas" id="pdfCanvas"></canvas>
                     <div class="dp-overlay-layer" id="overlayLayer"></div>
                   </div>
                   <div id="msgPreview" class="text-muted small mt-2 no-print"></div>
@@ -643,8 +645,8 @@
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    wrap.style.height = '215.9mm';
     wrap.style.width = '279.4mm';
+    wrap.style.removeProperty('height');
 
     let loading;
     if(typeof source === 'string'){
@@ -656,24 +658,36 @@
     const doc = await loading.promise;
     const page = await doc.getPage(1);
 
-    // Renderizamos por ancho y estiramos visualmente a carta horizontal.
-    // Esto evita que plantillas con otra proporcion de PDF dejen una franja blanca inferior.
-    const targetWidth = wrap.getBoundingClientRect().width;
+    // Renderizamos primero la plantilla y luego la dibujamos sobre un lienzo
+    // carta horizontal exacto. Asi no quedan franjas blancas si el PDF
+    // original trae otra proporcion interna.
+    const targetRect = wrap.getBoundingClientRect();
+    const targetWidth = Math.max(targetRect.width, 1);
+    const targetHeight = Math.max(targetRect.height, targetWidth * (215.9 / 279.4));
+    const pixelRatio = Math.max(window.devicePixelRatio || 1, 1);
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = targetWidth / unscaledViewport.width;
 
     const viewport = page.getViewport({ scale });
 
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = Math.ceil(viewport.width * pixelRatio);
+    sourceCanvas.height = Math.ceil(viewport.height * pixelRatio);
+    const sourceCtx = sourceCanvas.getContext('2d');
+    sourceCtx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    await page.render({ canvasContext: sourceCtx, viewport }).promise;
+
+    canvas.width = Math.ceil(targetWidth * pixelRatio);
+    canvas.height = Math.ceil(targetHeight * pixelRatio);
     canvas.style.width = '100%';
     canvas.style.height = '100%';
 
-    // Mantener el layout: el canvas al 100% del wrapper
     const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
 
-    wrap.style.height = '215.9mm';
+    wrap.style.removeProperty('height');
     if(msgPreview) msgPreview.textContent = `Plantilla renderizada (página 1).`;
     actualizarModoSoloTexto();
   }
@@ -687,7 +701,7 @@
       dpi.canvas.style.display = dpi.soloTexto ? 'none' : 'block';
     }
     if(dpi.previewWrap){
-      dpi.previewWrap.style.height = '215.9mm';
+      dpi.previewWrap.style.removeProperty('height');
     }
     if(dpi.msgPos){
       if(dpi.soloTexto){
