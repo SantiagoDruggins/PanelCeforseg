@@ -215,6 +215,48 @@ db.run(`ALTER TABLE certificados ADD COLUMN fecha_diploma TEXT`, (err) => {
   }
 });
 
+db.run(`ALTER TABLE certificados ADD COLUMN nro TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.nro:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN nci TEXT`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.nci:', err.message);
+  }
+});
+
+db.run(`ALTER TABLE certificados ADD COLUMN codigo_asignado_id INTEGER REFERENCES codigos_asignados(id)`, (err) => {
+  if (err && !err.message.includes('duplicate column')) {
+    console.log('certificados.codigo_asignado_id:', err.message);
+  }
+});
+
+/* =========================
+   ASIGNACION DE CODIGOS
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS codigos_asignados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nro TEXT NOT NULL UNIQUE,
+    nci TEXT NOT NULL UNIQUE,
+    aliado_id INTEGER NOT NULL,
+    estado TEXT NOT NULL DEFAULT 'disponible',
+    alumno_nombre TEXT,
+    alumno_cedula TEXT,
+    curso TEXT,
+    fecha_expedicion TEXT,
+    certificado_id INTEGER,
+    asignado_por_id INTEGER,
+    creado_en TEXT DEFAULT (datetime('now','localtime')),
+    usado_en TEXT,
+    FOREIGN KEY (aliado_id) REFERENCES usuarios(id),
+    FOREIGN KEY (asignado_por_id) REFERENCES usuarios(id),
+    FOREIGN KEY (certificado_id) REFERENCES certificados(id)
+  )
+`);
+
 /* =========================
    AUDITORÍA (blindaje anti-fraude)
 ========================= */

@@ -265,6 +265,7 @@ app.get('/matricular', (_, res) => res.sendFile(path.join(__dirname, 'public/mat
 app.get('/cursos-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/cursos.html')));
 app.get('/usuarios-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/usuarios.html')));
 app.get('/certificados-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/certificados.html')));
+app.get('/asignacion-codigos', (_, res) => res.sendFile(path.join(__dirname, 'public/asignacion-codigos.html')));
 app.get('/validar', (_, res) => res.sendFile(path.join(__dirname, 'public/validar.html')));
 app.get('/cierre-caja', (_, res) =>
   res.sendFile(path.join(__dirname, 'public/cierre-caja.html'))
@@ -292,7 +293,7 @@ app.post('/login', (req, res) => {
 ===================================================== */
 app.get('/api/dashboard',
   verificarToken,
-  permitirRoles('gerente','secretaria'),
+  permitirRoles('gerente','secretaria','aliado'),
   (req, res) => {
 
     db.serialize(() => {
@@ -480,6 +481,187 @@ ${JSON.stringify(data, null, 2)}
       console.error('Error en auditoria IA:', err);
       res.status(500).json({ mensaje: 'Error generando auditoria IA' });
     }
+  }
+);
+
+
+/* =====================================================
+   ASIGNACION DE CODIGOS NRO / NCI
+===================================================== */
+app.get('/api/codigos/aliados',
+  verificarToken,
+  permitirRoles('gerente'),
+  (_, res) => {
+    db.all(
+      "SELECT id, usuario, rol FROM usuarios WHERE rol='aliado' ORDER BY usuario ASC",
+      [],
+      (err, rows) => {
+        if (err) return res.status(500).json({ mensaje: 'Error cargando aliados' });
+        res.json(rows || []);
+      }
+    );
+  }
+);
+
+app.get('/api/codigos',
+  verificarToken,
+  permitirRoles('gerente','aliado'),
+  (req, res) => {
+    const params = [];
+    let where = '';
+
+    if (req.usuario.rol === 'aliado') {
+      where = 'WHERE ca.aliado_id = ?';
+      params.push(req.usuario.id);
+    }
+
+    db.all(`
+      SELECT
+        ca.id,
+        ca.nro,
+        ca.nci,
+        ca.aliado_id,
+        u.usuario AS aliado,
+        ca.estado,
+        ca.alumno_nombre,
+        ca.alumno_cedula,
+        ca.curso,
+        ca.fecha_expedicion,
+        ca.creado_en,
+        ca.usado_en,
+        ca.certificado_id
+      FROM codigos_asignados ca
+      LEFT JOIN usuarios u ON u.id = ca.aliado_id
+      ${where}
+      ORDER BY ca.id DESC
+      LIMIT 300
+    `, params, (err, rows) => {
+      if (err) return res.status(500).json({ mensaje: 'Error cargando codigos' });
+      res.json(rows || []);
+    });
+  }
+);
+
+app.post('/api/codigos',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const nro = (req.body.nro || '').toString().trim();
+    const nci = (req.body.nci || '').toString().trim();
+    const aliadoId = parseInt(req.body.aliado_id, 10);
+
+    if (!nro || !nci || !aliadoId) {
+      return res.status(400).json({ mensaje: 'Aliado, NRO y NCI son obligatorios' });
+    }
+
+    db.get("SELECT id FROM usuarios WHERE id=? AND rol='aliado'", [aliadoId], (err, aliado) => {
+      if (err) return res.status(500).json({ mensaje: 'Error validando aliado' });
+      if (!aliado) return res.status(400).json({ mensaje: 'Selecciona un usuario con rol aliado' });
+
+      db.run(`
+        INSERT INTO codigos_asignados (nro, nci, aliado_id, asignado_por_id)
+        VALUES (?,?,?,?)
+      `, [nro, nci, aliadoId, req.usuario.id], function(insertErr) {
+        if (insertErr) {
+          return res.status(400).json({ mensaje: 'Ese NRO o NCI ya existe' });
+        }
+        registrarAuditoria(req, 'asignar_codigo', 'codigos_asignados', this.lastID, { nro, nci, aliado_id: aliadoId });
+        res.json({ mensaje: 'Codigo asignado correctamente', id: this.lastID });
+      });
+    });
+  }
+);
+
+app.put('/api/codigos/:id/usar',
+  verificarToken,
+  permitirRoles('gerente','aliado'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const alumnoNombre = (req.body.alumno_nombre || '').toString().trim();
+    const alumnoCedula = (req.body.alumno_cedula || '').toString().trim();
+    const curso = (req.body.curso || '').toString().trim();
+    const fechaExpedicion = (req.body.fecha_expedicion || '').toString().trim();
+
+    if (!alumnoNombre || !alumnoCedula || !curso || !fechaExpedicion) {
+      return res.status(400).json({ mensaje: 'Nombre, cedula, curso y fecha de expedicion son obligatorios' });
+    }
+
+    const params = req.usuario.rol === 'aliado' ? [id, req.usuario.id] : [id];
+    const scope = req.usuario.rol === 'aliado' ? 'AND aliado_id=?' : '';
+
+    db.get(`SELECT * FROM codigos_asignados WHERE id=? ${scope}`, params, (err, codigo) => {
+      if (err) return res.status(500).json({ mensaje: 'Error buscando codigo' });
+      if (!codigo) return res.status(404).json({ mensaje: 'Codigo no encontrado' });
+      if (codigo.estado !== 'disponible') {
+        return res.status(400).json({ mensaje: 'Este codigo ya fue usado' });
+      }
+
+      db.serialize(() => {
+        db.run(`
+          INSERT INTO certificados
+            (estudiante_id, cedula, nombre, curso, fecha_diploma, tipo, archivo_pdf, fecha_subida, curso_id, fecha_emision, nro, nci, codigo_asignado_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `, [
+          null,
+          alumnoCedula,
+          alumnoNombre,
+          curso,
+          fechaExpedicion,
+          'codigo',
+          null,
+          new Date().toISOString(),
+          null,
+          fechaExpedicion,
+          codigo.nro,
+          codigo.nci,
+          id
+        ], function(certErr) {
+          if (certErr) return res.status(500).json({ mensaje: 'Error creando certificado del codigo' });
+
+          const certificadoId = this.lastID;
+          db.run(`
+            UPDATE codigos_asignados
+            SET estado='usado',
+                alumno_nombre=?,
+                alumno_cedula=?,
+                curso=?,
+                fecha_expedicion=?,
+                certificado_id=?,
+                usado_en=datetime('now','localtime')
+            WHERE id=? AND estado='disponible'
+          `, [alumnoNombre, alumnoCedula, curso, fechaExpedicion, certificadoId, id], function(updateErr) {
+            if (updateErr) return res.status(500).json({ mensaje: 'Error usando codigo' });
+            if (this.changes === 0) return res.status(400).json({ mensaje: 'Este codigo ya fue usado' });
+            registrarAuditoria(req, 'usar_codigo', 'codigos_asignados', id, {
+              nro: codigo.nro,
+              nci: codigo.nci,
+              alumno_cedula: alumnoCedula,
+              certificado_id: certificadoId
+            });
+            res.json({ mensaje: 'Codigo usado y certificado registrado', certificado_id: certificadoId });
+          });
+        });
+      });
+    });
+  }
+);
+
+app.delete('/api/codigos/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    db.get('SELECT estado FROM codigos_asignados WHERE id=?', [id], (err, row) => {
+      if (err) return res.status(500).json({ mensaje: 'Error buscando codigo' });
+      if (!row) return res.status(404).json({ mensaje: 'Codigo no encontrado' });
+      if (row.estado !== 'disponible') return res.status(400).json({ mensaje: 'No se puede eliminar un codigo usado' });
+
+      db.run('DELETE FROM codigos_asignados WHERE id=?', [id], function(delErr) {
+        if (delErr) return res.status(500).json({ mensaje: 'Error eliminando codigo' });
+        registrarAuditoria(req, 'eliminar_codigo', 'codigos_asignados', id, {});
+        res.json({ mensaje: 'Codigo eliminado' });
+      });
+    });
   }
 );
 
@@ -1805,18 +1987,24 @@ app.delete('/api/certificados/:id',
 /* =====================================================
    VALIDAR CERTIFICADOS
 ===================================================== */
-app.get('/api/validar/:cedula', (req, res) => {
+app.get('/api/validar/:consulta', (req, res) => {
+  const consulta = (req.params.consulta || '').trim();
   db.all(`
     SELECT 
+      cert.cedula,
       cert.nombre,
       cert.curso,
       cert.archivo_pdf,
-      cert.fecha_emision AS fecha_diploma
+      cert.fecha_emision AS fecha_diploma,
+      cert.nro,
+      cert.nci
     FROM certificados cert
-    WHERE cert.cedula = ?
+    WHERE TRIM(cert.cedula) = ?
+       OR TRIM(IFNULL(cert.nro, '')) = ?
+       OR TRIM(IFNULL(cert.nci, '')) = ?
     ORDER BY cert.fecha_emision DESC
   `,
-  [req.params.cedula.trim()],
+  [consulta, consulta, consulta],
   (_, certs) => {
     if(!certs || certs.length === 0){
       return res.json({ valido:false });

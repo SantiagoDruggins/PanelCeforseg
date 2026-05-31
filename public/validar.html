@@ -221,7 +221,7 @@ tbody tr:hover{
 <div id="app"></div>
 
 <script>
-// Página pública (sin layout del panel). Valida certificados por cédula.
+// Pagina publica (sin layout del panel). Valida certificados por cedula, NRO o NCI.
 
 function escapeHtml(s){
   if(s === null || s === undefined) return '';
@@ -241,11 +241,11 @@ document.getElementById('app').innerHTML = `
         <img src="/assets/logo.png" alt="CEFORSEG">
       </div>
       <h2>VALIDAR CERTIFICADOS</h2>
-      <div class="subtitle">Ingrese la cédula para consultar</div>
+      <div class="subtitle">Ingrese cedula, NRO o NCI para consultar</div>
     </div>
 
     <div class="search">
-      <input id="cedula" placeholder="Número de cédula" inputmode="numeric">
+      <input id="cedula" placeholder="Cedula, NRO o NCI">
       <button onclick="validar()" id="btnValidar">Validar</button>
     </div>
 
@@ -258,8 +258,8 @@ document.getElementById('app').innerHTML = `
 `;
 
 async function validar(){
-  const cedula = (document.getElementById('cedula').value || '').trim();
-  if(!cedula) return;
+  const consulta = (document.getElementById('cedula').value || '').trim();
+  if(!consulta) return;
 
   const cont = document.getElementById('resultado');
   cont.classList.remove('fade-in');
@@ -267,11 +267,11 @@ async function validar(){
   cont.classList.add('fade-in');
   cont.innerHTML = `
     <div class="success">
-      Validando cédula...
+      Validando registro...
     </div>
   `;
 
-  const res = await fetch('/api/validar/' + encodeURIComponent(cedula));
+  const res = await fetch('/api/validar/' + encodeURIComponent(consulta));
   const data = await res.json();
 
   cont.innerHTML = '';
@@ -279,7 +279,7 @@ async function validar(){
   if(!data.valido){
     cont.innerHTML = `
       <div class="error">
-        No se encontraron certificados válidos para <b>${escapeHtml(cedula)}</b>.
+        No se encontraron certificados validos para <b>${escapeHtml(consulta)}</b>.
       </div>
     `;
     return;
@@ -299,12 +299,16 @@ async function validar(){
   const filas = (lista) => lista.map(c => {
     const fecha = c.fecha_diploma ? escapeHtml(c.fecha_diploma) : '-';
     const curso = c.curso ? escapeHtml(c.curso) : '-';
+    const nro = c.nro ? escapeHtml(c.nro) : '-';
+    const nci = c.nci ? escapeHtml(c.nci) : '-';
     const pdf = c.archivo_pdf ? escapeHtml(c.archivo_pdf) : '';
 
     return `
       <tr>
         <td>${curso}</td>
         <td>${fecha}</td>
+        <td>${nro}</td>
+        <td>${nci}</td>
         <td>
           ${pdf ? `<a href=\"${pdf}\" target=\"_blank\" class=\"pdf\">Abrir PDF</a>` : '-'}
         </td>
@@ -322,13 +326,15 @@ async function validar(){
 
     ${modernos.length ? `
       <div style="margin-top:18px; font-weight:800; color:var(--azul-institucional); text-align:left;">
-        Certificados con PDF (2025 en adelante)
+        Certificados 2025 en adelante
       </div>
       <table style="margin-top:12px;">
         <thead>
           <tr>
             <th>Curso</th>
             <th>Fecha</th>
+            <th>NRO</th>
+            <th>NCI</th>
             <th>PDF</th>
           </tr>
         </thead>
@@ -350,6 +356,8 @@ async function validar(){
           <tr>
             <th>Curso</th>
             <th>Fecha</th>
+            <th>NRO</th>
+            <th>NCI</th>
             <th>PDF</th>
           </tr>
         </thead>
