@@ -41,7 +41,7 @@
     .dp-preview-wrap{
       width:var(--dp-page-w);
       max-width:100%;
-      min-height:var(--dp-page-h);
+      height:var(--dp-page-h);
       margin:0 auto;
       position:relative;
       background:#fff;
@@ -52,6 +52,8 @@
     .dp-canvas{
       display:block;
       width:100%;
+      height:100%;
+      object-fit:fill;
     }
     .dp-overlay-layer{
       position:absolute;
@@ -139,7 +141,7 @@
         box-shadow:none !important;
         border-radius:0 !important;
         width:var(--dp-page-w) !important;
-        min-height:var(--dp-page-h) !important;
+        height:var(--dp-page-h) !important;
         max-width:100% !important;
         margin:0 auto !important;
         page-break-inside:avoid;
@@ -641,7 +643,7 @@
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    wrap.style.height = '';
+    wrap.style.height = '215.9mm';
     wrap.style.width = '279.4mm';
 
     let loading;
@@ -654,7 +656,8 @@
     const doc = await loading.promise;
     const page = await doc.getPage(1);
 
-    // Calcular escala para que el ancho del PDF encaje con el wrapper (carta horizontal ~279.4mm)
+    // Renderizamos por ancho y estiramos visualmente a carta horizontal.
+    // Esto evita que plantillas con otra proporcion de PDF dejen una franja blanca inferior.
     const targetWidth = wrap.getBoundingClientRect().width;
     const unscaledViewport = page.getViewport({ scale: 1 });
     const scale = targetWidth / unscaledViewport.width;
@@ -663,13 +666,14 @@
 
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    canvas.style.height = viewport.height + 'px';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
 
     // Mantener el layout: el canvas al 100% del wrapper
     const ctx = canvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
 
-    wrap.style.height = viewport.height + 'px';
+    wrap.style.height = '215.9mm';
     if(msgPreview) msgPreview.textContent = `Plantilla renderizada (página 1).`;
     actualizarModoSoloTexto();
   }
@@ -683,12 +687,14 @@
       dpi.canvas.style.display = dpi.soloTexto ? 'none' : 'block';
     }
     if(dpi.previewWrap){
-      dpi.previewWrap.style.minHeight = '215.9mm';
+      dpi.previewWrap.style.height = '215.9mm';
     }
     if(dpi.msgPos){
-      dpi.msgPos.textContent = dpi.soloTexto
-        ? 'Modo solo texto activo: se imprimen unicamente los textos sobre hoja carta horizontal.'
-        : dpi.msgPos.textContent;
+      if(dpi.soloTexto){
+        dpi.msgPos.textContent = 'Modo solo texto activo: la plantilla se oculta a proposito y solo se imprimen textos sobre hoja carta horizontal.';
+      }else if(dpi.msgPos.textContent.includes('Modo solo texto activo')){
+        dpi.msgPos.textContent = 'Modo con plantilla activo: la plantilla debe llenar la hoja carta horizontal.';
+      }
     }
   }
 
