@@ -275,6 +275,21 @@ db.run(`ALTER TABLE codigos_asignados ADD COLUMN pagado_en TEXT`, (err) => {
   if (err && !err.message.includes('duplicate column')) console.log('codigos_asignados.pagado_en:', err.message);
 });
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS codigos_pagos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_id INTEGER NOT NULL,
+    aliado_id INTEGER NOT NULL,
+    valor INTEGER NOT NULL,
+    nota TEXT,
+    usuario_id INTEGER,
+    creado_en TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (codigo_id) REFERENCES codigos_asignados(id),
+    FOREIGN KEY (aliado_id) REFERENCES usuarios(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+  )
+`);
+
 /* =========================
    AUDITORÍA (blindaje anti-fraude)
 ========================= */

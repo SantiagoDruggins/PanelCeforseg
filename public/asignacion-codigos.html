@@ -148,6 +148,8 @@ function render(){
                 <th>NCI</th>
                 ${esGerente ? '<th>Aliado</th>' : ''}
                 <th>Valor</th>
+                <th>Abonado</th>
+                <th>Saldo</th>
                 <th>Estado</th>
                 <th>Pago</th>
                 <th>Alumno</th>
@@ -158,7 +160,7 @@ function render(){
               </tr>
             </thead>
             <tbody id="tablaCodigos">
-              <tr><td colspan="${esGerente ? 11 : 10}" class="text-center text-muted">Cargando...</td></tr>
+              <tr><td colspan="${esGerente ? 13 : 12}" class="text-center text-muted">Cargando...</td></tr>
             </tbody>
           </table>
         </div>
@@ -271,8 +273,90 @@ async function usarCodigo(e){
   }
 }
 
+async function editarCodigo(id){
+  const c = codigos.find(x => String(x.id) === String(id));
+  if(!c) return;
+
+  if(rol === 'aliado'){
+    if(c.estado !== 'usado') return;
+    const alumno = prompt('Nombre y apellido del alumno:', c.alumno_nombre || '');
+    if(alumno === null) return;
+    const cedula = prompt('Cedula del alumno:', c.alumno_cedula || '');
+    if(cedula === null) return;
+    const curso = prompt('Curso:', c.curso || '');
+    if(curso === null) return;
+    const fecha = prompt('Fecha de expedicion (AAAA-MM-DD):', c.fecha_expedicion || '');
+    if(fecha === null) return;
+    const res = await fetch('/api/codigos/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        alumno_nombre: alumno.trim(),
+        alumno_cedula: cedula.trim(),
+        curso: curso.trim(),
+        fecha_expedicion: fecha.trim()
+      })
+    });
+    const data = await res.json();
+    alert(data.mensaje || 'Operacion completada');
+    if(res.ok) cargarCodigos();
+    return;
+  }
+
+  const nro = prompt('NRO:', c.nro || '');
+  if(nro === null) return;
+  const nci = prompt('NCI:', c.nci || '');
+  if(nci === null) return;
+  const valor = prompt('Valor del codigo:', c.valor || 0);
+  if(valor === null) return;
+
+  let aliadoId = c.aliado_id;
+  const aliadoTxt = prompt('ID del aliado:', c.aliado_id || '');
+  if(aliadoTxt === null) return;
+  aliadoId = aliadoTxt;
+
+  const body = {
+    nro: nro.trim(),
+    nci: nci.trim(),
+    valor,
+    aliado_id: aliadoId
+  };
+
+  if(c.estado === 'usado'){
+    const alumno = prompt('Nombre y apellido del alumno:', c.alumno_nombre || '');
+    if(alumno === null) return;
+    const cedula = prompt('Cedula del alumno:', c.alumno_cedula || '');
+    if(cedula === null) return;
+    const curso = prompt('Curso:', c.curso || '');
+    if(curso === null) return;
+    const fecha = prompt('Fecha de expedicion (AAAA-MM-DD):', c.fecha_expedicion || '');
+    if(fecha === null) return;
+    body.alumno_nombre = alumno.trim();
+    body.alumno_cedula = cedula.trim();
+    body.curso = curso.trim();
+    body.fecha_expedicion = fecha.trim();
+  }
+
+  const res = await fetch('/api/codigos/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  alert(data.mensaje || 'Operacion completada');
+  if(res.ok){
+    cargarAliados();
+    cargarCodigos();
+  }
+}
+
 async function eliminarCodigo(id){
-  if(!confirm('Eliminar este codigo disponible?')) return;
+  const c = codigos.find(x => String(x.id) === String(id));
+  const usado = c && c.estado === 'usado';
+  const msg = usado
+    ? 'Este codigo ya fue usado. Si lo eliminas tambien se elimina el certificado generado y sus abonos. Continuar?'
+    : 'Eliminar este codigo disponible?';
+  if(!confirm(msg)) return;
   const res = await fetch('/api/codigos/' + id, {
     method: 'DELETE',
     headers: { Authorization: 'Bearer ' + token }
@@ -287,6 +371,28 @@ async function pagarCodigo(id){
   const res = await fetch('/api/codigos/' + id + '/pagar', {
     method: 'PUT',
     headers: { Authorization: 'Bearer ' + token }
+  });
+  const data = await res.json();
+  alert(data.mensaje || 'Operacion completada');
+  if(res.ok){
+    cargarAliados();
+    cargarCodigos();
+  }
+}
+
+async function abonarCodigo(id){
+  const c = codigos.find(x => String(x.id) === String(id));
+  if(!c) return;
+  const saldo = Number(c.saldo_codigo) || 0;
+  const valor = prompt('Valor del abono. Saldo actual: ' + formatCOP(saldo), saldo);
+  if(valor === null) return;
+  const nota = prompt('Nota del abono:', '');
+  if(nota === null) return;
+
+  const res = await fetch('/api/codigos/' + id + '/pagar', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ valor, nota })
   });
   const data = await res.json();
   alert(data.mensaje || 'Operacion completada');
@@ -329,6 +435,7 @@ function pintarAliados(){
     <table class="table table-sm table-hover align-middle mb-0">
       <thead class="table-light">
         <tr>
+          <th>ID</th>
           <th>Aliado</th>
           <th>Codigos</th>
           <th>Disponibles</th>
@@ -342,6 +449,7 @@ function pintarAliados(){
           const saldo = Number(a.saldo_pendiente) || 0;
           return `
             <tr>
+              <td>${a.id}</td>
               <td>${escapeHtml(a.usuario)}</td>
               <td>${Number(a.total_codigos) || 0}</td>
               <td>${Number(a.disponibles) || 0}</td>
@@ -367,13 +475,13 @@ function pintarCodigos(){
   const disponibles = codigos.filter(c => c.estado === 'disponible').length;
   const saldoPendiente = codigos
     .filter(c => c.estado === 'usado' && c.estado_pago === 'pendiente')
-    .reduce((sum, c) => sum + (Number(c.valor) || 0), 0);
+    .reduce((sum, c) => sum + (Number(c.saldo_codigo) || 0), 0);
   document.getElementById('resumenCodigos').textContent = `${total} codigos · ${disponibles} disponibles`;
   const saldoAliado = document.getElementById('saldoAliado');
   if(saldoAliado) saldoAliado.textContent = formatCOP(saldoPendiente);
 
   if(!codigos.length){
-    tbody.innerHTML = `<tr><td colspan="${esGerente ? 11 : 10}" class="text-center text-muted">No hay codigos asignados</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${esGerente ? 13 : 12}" class="text-center text-muted">No hay codigos asignados</td></tr>`;
     return;
   }
 
@@ -389,9 +497,11 @@ function pintarCodigos(){
       : '<span class="text-muted small">No aplica</span>';
     const acciones = disponible
       ? `<button class="btn btn-sm btn-success" onclick="iniciarUso(${c.id})">Usar</button>
-         ${esGerente ? `<button class="btn btn-sm btn-outline-danger" onclick="eliminarCodigo(${c.id})">Eliminar</button>` : ''}`
+         ${esGerente ? `<button class="btn btn-sm btn-outline-secondary" onclick="editarCodigo(${c.id})">Editar</button><button class="btn btn-sm btn-outline-danger" onclick="eliminarCodigo(${c.id})">Eliminar</button>` : ''}`
       : `${c.certificado_id ? `<span class="text-muted small">Cert. #${c.certificado_id}</span>` : ''}
-         ${esGerente && c.estado_pago === 'pendiente' ? `<button class="btn btn-sm btn-outline-success" onclick="pagarCodigo(${c.id})">Pagó</button>` : ''}`;
+         ${esGerente ? `<button class="btn btn-sm btn-outline-secondary" onclick="editarCodigo(${c.id})">Editar</button><button class="btn btn-sm btn-outline-danger" onclick="eliminarCodigo(${c.id})">Eliminar</button>` : ''}
+         ${!esGerente ? `<button class="btn btn-sm btn-outline-secondary" onclick="editarCodigo(${c.id})">Editar datos</button>` : ''}
+         ${esGerente && c.estado_pago === 'pendiente' ? `<button class="btn btn-sm btn-outline-primary" onclick="abonarCodigo(${c.id})">Abonar</button><button class="btn btn-sm btn-outline-success" onclick="pagarCodigo(${c.id})">Pagó</button>` : ''}`;
 
     return `
       <tr>
@@ -399,6 +509,8 @@ function pintarCodigos(){
         <td><strong>${escapeHtml(c.nci)}</strong></td>
         ${esGerente ? `<td>${escapeHtml(c.aliado || '-')}</td>` : ''}
         <td>${formatCOP(c.valor || 0)}</td>
+        <td>${formatCOP(c.total_abonado || 0)}</td>
+        <td>${formatCOP(c.saldo_codigo || 0)}</td>
         <td>${badge}</td>
         <td>${pago}</td>
         <td>${escapeHtml(c.alumno_nombre || '-')}</td>
