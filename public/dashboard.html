@@ -157,7 +157,7 @@ fetch('/layout.html')
   } else if (rol === 'secretaria') {
     content.innerHTML = `
       <h3 class="fw-bold mb-3"><i class="bi bi-clipboard-check me-2"></i>Operativo</h3>
-      <p class="text-muted mb-4">Accesos directos a lo que más usas.</p>
+      <p class="text-muted mb-4">Accesos directos y cartera prioritaria para gestionar el dia.</p>
 
       <div class="row g-3 mb-4">
         <div class="col-md-4">
@@ -198,6 +198,15 @@ fetch('/layout.html')
         </div>
         <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso">
+            <a href="/deudores-panel">
+              <div class="icono"><i class="bi bi-telephone-outbound"></i></div>
+              <h5 class="mt-2">Cobranza</h5>
+              <small class="text-muted">Llamadas, notas y seguimiento</small>
+            </a>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow rounded-3 card-acceso">
             <a href="/validar">
               <div class="icono"><i class="bi bi-check2-circle"></i></div>
               <h5 class="mt-2">Validar certificado</h5>
@@ -222,6 +231,43 @@ fetch('/layout.html')
               <small>Alumnos con deuda</small>
               <h4 class="mb-0" id="alumnosDeudores">0</h4>
             </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow rounded-3 border-danger">
+            <div class="card-body">
+              <small>Deuda total activa</small>
+              <h4 class="text-danger mb-0" id="deudaTotal">$0 COP</h4>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow rounded-3 mt-4">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div>
+            <strong><i class="bi bi-telephone-outbound me-1"></i>Cobros recomendados</strong>
+            <div class="small text-muted">Personas con saldo pendiente para llamar primero.</div>
+          </div>
+          <a href="/deudores-panel" class="btn btn-sm btn-outline-primary">Abrir sesion de cobro</a>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Nombre</th>
+                  <th>Cedula</th>
+                  <th>Telefono</th>
+                  <th>Deuda</th>
+                  <th>Ultima gestion</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tablaCobrosSecretaria">
+                <tr><td colspan="6" class="text-center text-muted">Cargando cartera...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -437,6 +483,10 @@ fetch('/layout.html')
     if (document.getElementById('alumnosDeudores')) document.getElementById('alumnosDeudores').innerText = d.alumnos_deudores;
   });
 
+  if (rol === 'secretaria') {
+    cargarCobrosSecretaria();
+  }
+
   if (rol === 'gerente') {
     fetch('/api/dashboard/auditoria', { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } })
     .then(r=>r.json())
@@ -570,6 +620,45 @@ function porcentajeTxt(v){
 function renderLista(items, renderItem, empty){
   if(!items || items.length === 0) return `<div class="text-muted">${empty}</div>`;
   return items.map(renderItem).join('');
+}
+
+async function cargarCobrosSecretaria(){
+  const tbody = document.getElementById('tablaCobrosSecretaria');
+  if(!tbody) return;
+  try{
+    const res = await fetch('/api/estudiantes/deudores', {
+      headers:{ Authorization:'Bearer ' + localStorage.getItem('token') }
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.mensaje || 'Error cargando cartera');
+    const lista = (data || [])
+      .slice()
+      .sort((a,b) => (Number(b.total_deuda) || 0) - (Number(a.total_deuda) || 0))
+      .slice(0, 8);
+
+    if(lista.length === 0){
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Sin alumnos con deuda pendiente.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = lista.map(d => {
+      const gestion = d.ultima_nota
+        ? `${(d.ultimo_motivo || 'Gestion')}: ${d.ultima_nota}`.slice(0, 70)
+        : 'Sin gestion registrada';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(d.nombre || '-')}</strong></td>
+          <td>${escapeHtml(d.cedula || '-')}</td>
+          <td>${escapeHtml(d.telefono || '-')}</td>
+          <td><strong class="text-danger">${formatCOP(d.total_deuda || 0)}</strong></td>
+          <td class="small">${escapeHtml(gestion)}</td>
+          <td><a class="btn btn-sm btn-outline-primary" href="/deudores-panel">Gestionar</a></td>
+        </tr>
+      `;
+    }).join('');
+  }catch(_e){
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No se pudo cargar la cartera.</td></tr>';
+  }
 }
 
 function escapeHtml(s){
