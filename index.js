@@ -2061,6 +2061,20 @@ app.post('/api/facturas/:id/abrir-cajon',
   }
 );
 
+app.post('/api/caja/abrir-cajon',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const resultado = await abrirCajonDinero();
+      registrarAuditoria(req, 'abrir_cajon_manual', 'caja', null, { resultado });
+      res.json(resultado);
+    } catch (err) {
+      res.status(500).json({ ok: false, mensaje: 'Error abriendo cajon' });
+    }
+  }
+);
+
 /* =====================================================
    CIERRE DE CAJA - DATOS DEL SISTEMA
 ===================================================== */

@@ -119,6 +119,45 @@ if(!localStorage.getItem('token')) location.href='/login';
 function formatCOP(n){ if(n==null||n==='') return '$0 COP'; return '$' + Number(n).toLocaleString('es-CO') + ' COP'; }
 let periodoFinanzas = 'dia';
 let ultimaFinanza = null;
+let cajonAbriendo = false;
+
+async function abrirCajonManual(){
+  const rol = localStorage.getItem('rol') || '';
+  if(!['gerente','secretaria'].includes(rol)){
+    alert('No tienes permiso para abrir caja.');
+    return;
+  }
+  if(cajonAbriendo) return;
+  if(!confirm('Abrir cajon de dinero? Esta accion queda registrada en auditoria.')) return;
+
+  cajonAbriendo = true;
+  try{
+    const res = await fetch('/api/caja/abrir-cajon', {
+      method:'POST',
+      headers:{ Authorization:'Bearer ' + localStorage.getItem('token') }
+    });
+    const data = await res.json();
+    if(data.ok){
+      alert('Caja abierta.');
+    }else{
+      alert(data.mensaje || 'No se pudo abrir la caja. Revisa la configuracion de la impresora.');
+    }
+  }catch(err){
+    alert('No se pudo conectar con el servidor para abrir caja.');
+  }finally{
+    cajonAbriendo = false;
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if(e.key === 'F9'){
+    const rol = localStorage.getItem('rol') || '';
+    if(['gerente','secretaria'].includes(rol)){
+      e.preventDefault();
+      abrirCajonManual();
+    }
+  }
+});
 
 fetch('/layout.html')
 .then(r=>r.text())
@@ -141,6 +180,15 @@ fetch('/layout.html')
               <h5 class="mt-2">Asignacion de codigos</h5>
               <small class="text-muted">Ver disponibles y registrar alumnos</small>
             </a>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow rounded-3 card-acceso border-warning">
+            <button type="button" class="btn text-start w-100 h-100 p-3" onclick="abrirCajonManual()">
+              <div class="icono"><i class="bi bi-safe2-fill"></i></div>
+              <h5 class="mt-2">Abrir caja</h5>
+              <small class="text-muted">Apertura manual del cajon (F9)</small>
+            </button>
           </div>
         </div>
         <div class="col-md-4">
