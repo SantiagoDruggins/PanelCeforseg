@@ -209,6 +209,36 @@ async function cargarCursos(){
 }
 
 /* 🚀 Submit */
+function mostrarResultadoMatricula(estudianteId, facturaId){
+  const content = document.querySelector('.content') || document.getElementById('app');
+  content.innerHTML = `
+    <div class="card shadow-sm mx-auto" style="max-width:720px;">
+      <div class="card-body text-center p-4">
+        <h3 class="mb-2">Matricula registrada</h3>
+        <p class="text-muted mb-4">Antes de salir, imprime los documentos necesarios.</p>
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary btn-lg" onclick="window.open('/ficha-imprimir?id=${estudianteId}', '_blank', 'width=900,height=800')">
+            Imprimir acta de matricula
+          </button>
+          ${facturaId ? `
+          <button class="btn btn-success btn-lg" onclick="window.open('/factura-pos.html?id=${facturaId}', '_blank', 'width=420,height=720')">
+            Imprimir factura POS
+          </button>
+          ` : ''}
+          <a class="btn btn-outline-secondary btn-lg" href="/estudiante-ficha?id=${estudianteId}">
+            Abrir ficha del alumno
+          </a>
+          <a class="btn btn-outline-dark" href="/matricular">
+            Registrar otra matricula
+          </a>
+          <a class="btn btn-link" href="/estudiantes-panel">
+            Volver a estudiantes
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+}
 function registrarSubmit(){
   document.getElementById('formMatricula').addEventListener('submit', async e=>{
     e.preventDefault();
@@ -241,7 +271,11 @@ function registrarSubmit(){
     });
 
     const data = await res.json();
-    alert(data.mensaje);
+    if(!res.ok){
+      alert(data.mensaje || 'No se pudo registrar la matricula');
+      return;
+    }
+    let facturaId = null;
     if (data.id && abonoInicial > 0) {
       const pagoRes = await fetch('/api/abonos',{
         method:'POST',
@@ -262,13 +296,13 @@ function registrarSubmit(){
       if(!pagoRes.ok){
         alert(pagoData.mensaje || 'Estudiante creado, pero no se pudo facturar el pago inicial');
       }else if(pagoData.factura && pagoData.factura.id){
-        window.open('/factura-pos.html?id=' + pagoData.factura.id, '_blank', 'width=420,height=720');
+        facturaId = pagoData.factura.id;
       }
     }
     if (data.id) {
-      window.open('/ficha-imprimir?id=' + data.id, '_blank', 'width=900,height=800');
+      mostrarResultadoMatricula(data.id, facturaId);
+      return;
     }
-    location.href='/estudiantes-panel';
   });
 }
 </script>
