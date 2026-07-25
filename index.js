@@ -62,6 +62,23 @@ function formatoNumeroFactura(n) {
   return `FAC-${String(Number(n) || 1).padStart(6, '0')}`;
 }
 
+function fechaHoraColombiaSQL(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
 function abrirCajonDinero() {
   const pulse = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
   const host = process.env.POS_PRINTER_HOST;
@@ -1822,12 +1839,13 @@ app.post('/api/abonos',
                   }
 
                   const abonoId = this.lastID;
+                  const creadoEn = fechaHoraColombiaSQL();
                   db.run(`
                     INSERT INTO facturas
-                    (numero, tipo, estudiante_id, curso_id, abono_id, valor, metodo_pago, fecha, usuario_id, nota, estado)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    (numero, tipo, estudiante_id, curso_id, abono_id, valor, metodo_pago, fecha, usuario_id, nota, estado, creado_en)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                   `,
-                  [numeroFactura, 'ingreso', estudiante_id, curso_id, abonoId, valorAbono, metodo, fechaIso, req.usuario.id, nota || null, 'emitida'],
+                  [numeroFactura, 'ingreso', estudiante_id, curso_id, abonoId, valorAbono, metodo, fechaIso, req.usuario.id, nota || null, 'emitida', creadoEn],
                   function(errFactura) {
                     if (errFactura) {
                       db.run('ROLLBACK');
