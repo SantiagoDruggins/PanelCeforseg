@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Factura POS - CEFORSEG</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:#eef1f5;
+  color:#111;
+  font-family:Arial, Helvetica, sans-serif;
+}
+.toolbar{
+  position:sticky;
+  top:0;
+  display:flex;
+  gap:8px;
+  justify-content:center;
+  padding:12px;
+  background:#fff;
+  border-bottom:1px solid #d8dde6;
+}
+.toolbar button{
+  border:1px solid #1f3556;
+  background:#0a3b78;
+  color:#fff;
+  padding:9px 12px;
+  border-radius:6px;
+  font-weight:700;
+  cursor:pointer;
+}
+.toolbar button.secondary{background:#fff;color:#0a3b78}
+.ticket{
+  width:80mm;
+  min-height:120mm;
+  margin:16px auto;
+  padding:10px 8px;
+  background:#fff;
+  font-size:12px;
+  line-height:1.25;
+}
+.center{text-align:center}
+.brand{
+  font-size:18px;
+  font-weight:800;
+  letter-spacing:0;
+}
+.muted{font-size:10px;color:#333}
+.numero{
+  margin:8px 0;
+  padding:6px 0;
+  border-top:1px dashed #111;
+  border-bottom:1px dashed #111;
+  font-size:16px;
+  font-weight:800;
+  text-align:center;
+}
+.row{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  margin:3px 0;
+}
+.label{font-weight:700}
+.value{text-align:right}
+.block{margin:8px 0}
+.total{
+  margin-top:8px;
+  padding-top:8px;
+  border-top:1px dashed #111;
+  font-size:17px;
+  font-weight:800;
+}
+.qr{
+  width:100%;
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px dashed #111;
+  text-align:center;
+  font-size:10px;
+}
+.estado{
+  display:inline-block;
+  margin-top:4px;
+  padding:2px 6px;
+  border:1px solid #111;
+  font-size:10px;
+  font-weight:700;
+}
+@page{size:80mm auto;margin:0}
+@media print{
+  body{background:#fff}
+  .toolbar{display:none}
+  .ticket{
+    margin:0;
+    width:80mm;
+    min-height:auto;
+    box-shadow:none;
+  }
+}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button onclick="imprimir()">Imprimir</button>
+  <button class="secondary" onclick="abrirCajon()">Abrir cajon</button>
+  <button class="secondary" onclick="window.close()">Cerrar</button>
+</div>
+
+<main class="ticket" id="ticket">
+  <div class="center muted">Cargando factura...</div>
+</main>
+
+<script>
+const token = localStorage.getItem('token');
+if(!token) location.href = '/login';
+
+const params = new URLSearchParams(location.search);
+const facturaId = params.get('id');
+let facturaActual = null;
+
+function formatCOP(n){
+  return '$' + Number(n || 0).toLocaleString('es-CO') + ' COP';
+}
+
+function escapeHtml(value){
+  return String(value == null ? '' : value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function fechaLocal(fecha){
+  const d = new Date(fecha);
+  if(Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('es-CO', { dateStyle:'short', timeStyle:'short' });
+}
+
+async function cargarFactura(){
+  if(!facturaId){
+    document.getElementById('ticket').innerHTML = '<div class="center">Factura no indicada</div>';
+    return;
+  }
+
+  const res = await fetch('/api/facturas/' + facturaId, {
+    headers:{ Authorization:'Bearer ' + token }
+  });
+  const data = await res.json();
+  if(!res.ok){
+    document.getElementById('ticket').innerHTML = '<div class="center">' + escapeHtml(data.mensaje || 'Error') + '</div>';
+    return;
+  }
+
+  facturaActual = data;
+  document.getElementById('ticket').innerHTML = `
+    <section class="center">
+      <div class="brand">CEFORSEG</div>
+      <div class="muted">Factura POS de ingreso</div>
+      <span class="estado">${escapeHtml(data.estado || 'emitida').toUpperCase()}</span>
+    </section>
+
+    <div class="numero">${escapeHtml(data.numero)}</div>
+
+    <section class="block">
+      <div class="row"><span class="label">Fecha</span><span class="value">${fechaLocal(data.fecha)}</span></div>
+      <div class="row"><span class="label">Cajero</span><span class="value">${escapeHtml(data.usuario || '-')}</span></div>
+      <div class="row"><span class="label">Metodo</span><span class="value">${escapeHtml(data.metodo_pago || '-')}</span></div>
+    </section>
+
+    <section class="block">
+      <div class="label">Alumno</div>
+      <div>${escapeHtml(data.estudiante || '-')}</div>
+      <div class="muted">CC/NIT: ${escapeHtml(data.cedula || '-')} · Tel: ${escapeHtml(data.telefono || '-')}</div>
+    </section>
+
+    <section class="block">
+      <div class="row"><span class="label">Concepto</span><span class="value">Abono / pago</span></div>
+      <div class="row"><span class="label">Curso</span><span class="value">${escapeHtml(data.curso || '-')}</span></div>
+      ${data.nota ? `<div class="block"><span class="label">Nota:</span> ${escapeHtml(data.nota)}</div>` : ''}
+    </section>
+
+    <section class="total row">
+      <span>TOTAL</span>
+      <span>${formatCOP(data.valor)}</span>
+    </section>
+
+    <section class="qr">
+      Conserve este comprobante.<br>
+      Consecutivo generado automaticamente por el sistema.<br>
+      Sin este numero el ingreso no existe en caja.
+    </section>
+  `;
+
+  setTimeout(async () => {
+    if(data.metodo_pago === 'efectivo') await abrirCajon(true);
+    imprimir();
+  }, 500);
+}
+
+function imprimir(){
+  window.print();
+}
+
+async function abrirCajon(silencioso){
+  if(!facturaId) return;
+  try{
+    const res = await fetch('/api/facturas/' + facturaId + '/abrir-cajon', {
+      method:'POST',
+      headers:{ Authorization:'Bearer ' + token }
+    });
+    const data = await res.json();
+    if(!silencioso && data.mensaje) alert(data.mensaje);
+  }catch(err){
+    if(!silencioso) alert('No se pudo abrir el cajon desde el sistema');
+  }
+}
+
+cargarFactura();
+</script>
+</body>
+</html>

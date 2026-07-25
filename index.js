@@ -2,6 +2,9 @@ const express = require('express');
 const app = express();
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
+const os = require('os');
+const { execFile } = require('child_process');
 const multer = require('multer');
 
 function cargarEnvLocal() {
@@ -52,6 +55,49 @@ function dbGet(sql, params = []) {
 function dbAll(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows || []));
+  });
+}
+
+function formatoNumeroFactura(n) {
+  return `FAC-${String(Number(n) || 1).padStart(6, '0')}`;
+}
+
+function abrirCajonDinero() {
+  const pulse = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+  const host = process.env.POS_PRINTER_HOST;
+  const port = Number(process.env.POS_PRINTER_PORT || 9100);
+  const share = process.env.POS_PRINTER_SHARE;
+
+  if (host) {
+    return new Promise((resolve) => {
+      const socket = net.createConnection({ host, port }, () => {
+        socket.write(pulse);
+        socket.end();
+      });
+      socket.setTimeout(2500);
+      socket.on('close', () => resolve({ ok: true, metodo: `tcp:${host}:${port}` }));
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve({ ok: false, mensaje: 'Tiempo agotado abriendo cajon por red' });
+      });
+      socket.on('error', (err) => resolve({ ok: false, mensaje: err.message }));
+    });
+  }
+
+  if (share) {
+    const tmp = path.join(os.tmpdir(), `cajon-${Date.now()}.bin`);
+    fs.writeFileSync(tmp, pulse);
+    return new Promise((resolve) => {
+      execFile('cmd.exe', ['/c', 'copy', '/B', tmp, share], { windowsHide: true }, (err) => {
+        fs.unlink(tmp, () => {});
+        resolve(err ? { ok: false, mensaje: err.message } : { ok: true, metodo: `share:${share}` });
+      });
+    });
+  }
+
+  return Promise.resolve({
+    ok: false,
+    mensaje: 'Configura POS_PRINTER_HOST o POS_PRINTER_SHARE para abrir cajon por ESC/POS'
   });
 }
 
@@ -1482,8 +1528,9 @@ app.post('/api/estudiantes',
   (req, res) => {
 
     const { nombre, cedula, telefono, ciudad, direccion, email, contacto_emergencia, fecha_matricula } = req.body;
-    let cursos = req.body.curso_ids || [];
+    let cursos = req.body.curso_ids || req.body['curso_ids[]'] || [];
     if (!Array.isArray(cursos)) cursos = [cursos];
+    cursos = cursos.map(c => Number(c)).filter(c => Number.isInteger(c) && c > 0);
 
     const foto = req.file ? `/uploads/fotos/${req.file.filename}` : null;
     const fechaMat = fecha_matricula || new Date().toISOString().slice(0, 10);
@@ -1495,30 +1542,39 @@ app.post('/api/estudiantes',
     `,
     [nombre, cedula, telefono, ciudad, direccion, foto, email || null, contacto_emergencia || null, fechaMat, req.usuario?.id || null],
     function(err){
-      if(err) return res.status(400).json({ mensaje:'Cédula ya registrada' });
+      if(err) return res.status(400).json({ mensaje:'Cedula ya registrada' });
 
       const estudianteId = this.lastID;
+      if (!cursos.length) return res.json({ mensaje:'Estudiante creado', id: estudianteId });
 
-      cursos.forEach(cursoId => {
-        db.get(
-          'SELECT precio FROM cursos WHERE id=? AND activo=1',
-          [cursoId],
-          (_, curso) => {
-            if(!curso) return;
-            db.run(`
-              INSERT INTO estudiante_cursos
-              (estudiante_id, curso_id, precio, saldo)
-              VALUES (?,?,?,?)
-            `,
-            [estudianteId, cursoId, curso.precio, curso.precio]);
-          }
-        );
+      const placeholders = cursos.map(() => '?').join(',');
+      db.all(`SELECT id, precio FROM cursos WHERE activo=1 AND id IN (${placeholders})`, cursos, (errCursos, rows) => {
+        if (errCursos) return res.status(500).json({ mensaje: 'Estudiante creado, pero hubo error cargando cursos', id: estudianteId });
+        const cursosValidos = rows || [];
+        if (!cursosValidos.length) return res.json({ mensaje:'Estudiante creado', id: estudianteId });
+
+        let pendientes = cursosValidos.length;
+        let fallo = false;
+        cursosValidos.forEach(curso => {
+          db.run(`
+            INSERT INTO estudiante_cursos
+            (estudiante_id, curso_id, precio, saldo)
+            VALUES (?,?,?,?)
+          `,
+          [estudianteId, curso.id, curso.precio, curso.precio],
+          (errIns) => {
+            if (errIns) fallo = true;
+            pendientes -= 1;
+            if (pendientes === 0) {
+              if (fallo) return res.status(500).json({ mensaje: 'Estudiante creado, pero hubo error matriculando cursos', id: estudianteId });
+              registrarAuditoria(req, 'crear_estudiante_matricula', 'estudiantes', estudianteId, { cursos });
+              res.json({ mensaje:'Estudiante creado', id: estudianteId });
+            }
+          });
+        });
       });
-
-      res.json({ mensaje:'Estudiante creado', id: estudianteId });
     });
 });
-
 
 
 /* =====================================================
@@ -1664,6 +1720,7 @@ app.get('/api/abonos/:id',
         a.rol,
         a.metodo_pago,
         a.numero_factura,
+        a.factura_id,
         u.usuario,
         c.nombre AS curso,
         a.curso_id
@@ -1695,107 +1752,221 @@ app.post('/api/abonos',
   permitirRoles('gerente','secretaria'),
   (req, res) => {
 
-    const { estudiante_id, curso_id, valor, nota, metodo_pago, numero_factura, fecha } = req.body;
-
-    const numeroFactura = (numero_factura || '').toString().trim();
-    if (!numeroFactura) return res.status(400).json({ mensaje: 'El número de factura es obligatorio' });
+    const { estudiante_id, curso_id, valor, nota, metodo_pago, fecha } = req.body;
+    const valorAbono = Number(valor);
+    if (!estudiante_id || !curso_id || !Number.isFinite(valorAbono) || valorAbono <= 0) {
+      return res.status(400).json({ mensaje: 'Seleccione curso y valor valido' });
+    }
 
     const metodo = metodo_pago || 'efectivo';
-
     const fechaIso = normalizarFechaAbono(fecha);
-    if (!fechaIso) return res.status(400).json({ mensaje: 'Fecha del abono inválida' });
+    if (!fechaIso) return res.status(400).json({ mensaje: 'Fecha del abono invalida' });
 
-    db.get(
-      'SELECT saldo FROM estudiante_cursos WHERE estudiante_id=? AND curso_id=?',
-      [estudiante_id, curso_id],
-      (_, row) => {
-        if(!row) return res.status(400).json({ mensaje:'Curso inválido' });
-
-        const nuevoSaldo = row.saldo - valor;
-
-        db.run(`
-          INSERT INTO abonos
-          (estudiante_id, curso_id, valor, fecha, usuario_id, nota, rol, metodo_pago, numero_factura)
-          VALUES (?,?,?,?,?,?,?,?,?)
-        `,
-        [
-          estudiante_id,
-          curso_id,
-          valor,
-          fechaIso,
-          req.usuario.id,
-          nota || null,
-          req.usuario.rol,
-          metodo,
-          numeroFactura
-        ]);
-
-        db.run(
-          'UPDATE estudiante_cursos SET saldo=? WHERE estudiante_id=? AND curso_id=?',
-          [nuevoSaldo, estudiante_id, curso_id],
-          () => {
-            registrarAuditoria(req, 'crear_abono', 'abonos', null, { estudiante_id, curso_id, valor, metodo, numero_factura: numeroFactura, fecha: fechaIso });
-            res.json({ mensaje:'Abono registrado' });
+    db.serialize(() => {
+      db.run('BEGIN IMMEDIATE TRANSACTION');
+      db.get(
+        `SELECT ec.saldo, e.nombre AS estudiante, c.nombre AS curso
+         FROM estudiante_cursos ec
+         JOIN estudiantes e ON e.id = ec.estudiante_id
+         JOIN cursos c ON c.id = ec.curso_id
+         WHERE ec.estudiante_id=? AND ec.curso_id=?`,
+        [estudiante_id, curso_id],
+        (errCurso, row) => {
+          if (errCurso || !row) {
+            db.run('ROLLBACK');
+            return res.status(400).json({ mensaje:'Curso invalido' });
           }
-        );
-      }
-    );
-  });
 
+          db.run(`INSERT OR IGNORE INTO config (clave, valor) VALUES ('factura_siguiente', '1')`, [], (errCfg) => {
+            if (errCfg) {
+              db.run('ROLLBACK');
+              return res.status(500).json({ mensaje: 'Error preparando consecutivo de factura' });
+            }
+
+            db.get(`SELECT valor FROM config WHERE clave='factura_siguiente'`, [], (errSeq, cfg) => {
+              if (errSeq) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ mensaje: 'Error leyendo consecutivo de factura' });
+              }
+
+              const siguiente = Math.max(1, parseInt(cfg && cfg.valor, 10) || 1);
+              const numeroFactura = formatoNumeroFactura(siguiente);
+              const nuevoSaldo = Number(row.saldo || 0) - valorAbono;
+
+              db.run(`UPDATE config SET valor=? WHERE clave='factura_siguiente'`, [String(siguiente + 1)], (errUpdSeq) => {
+                if (errUpdSeq) {
+                  db.run('ROLLBACK');
+                  return res.status(500).json({ mensaje: 'Error actualizando consecutivo de factura' });
+                }
+
+                db.run(`
+                  INSERT INTO abonos
+                  (estudiante_id, curso_id, valor, fecha, usuario_id, nota, rol, metodo_pago, numero_factura)
+                  VALUES (?,?,?,?,?,?,?,?,?)
+                `,
+                [
+                  estudiante_id,
+                  curso_id,
+                  valorAbono,
+                  fechaIso,
+                  req.usuario.id,
+                  nota || null,
+                  req.usuario.rol,
+                  metodo,
+                  numeroFactura
+                ],
+                function(errAbono) {
+                  if (errAbono) {
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ mensaje: 'Error registrando abono' });
+                  }
+
+                  const abonoId = this.lastID;
+                  db.run(`
+                    INSERT INTO facturas
+                    (numero, tipo, estudiante_id, curso_id, abono_id, valor, metodo_pago, fecha, usuario_id, nota, estado)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                  `,
+                  [numeroFactura, 'ingreso', estudiante_id, curso_id, abonoId, valorAbono, metodo, fechaIso, req.usuario.id, nota || null, 'emitida'],
+                  function(errFactura) {
+                    if (errFactura) {
+                      db.run('ROLLBACK');
+                      return res.status(500).json({ mensaje: 'Error generando factura' });
+                    }
+
+                    const facturaId = this.lastID;
+                    db.run('UPDATE abonos SET factura_id=? WHERE id=?', [facturaId, abonoId], (errLink) => {
+                      if (errLink) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ mensaje: 'Error vinculando factura' });
+                      }
+
+                      db.run(
+                        'UPDATE estudiante_cursos SET saldo=? WHERE estudiante_id=? AND curso_id=?',
+                        [nuevoSaldo, estudiante_id, curso_id],
+                        (errSaldo) => {
+                          if (errSaldo) {
+                            db.run('ROLLBACK');
+                            return res.status(500).json({ mensaje: 'Error actualizando saldo' });
+                          }
+
+                          db.run('COMMIT', (errCommit) => {
+                            if (errCommit) return res.status(500).json({ mensaje: 'Error cerrando factura' });
+                            registrarAuditoria(req, 'crear_factura_abono', 'facturas', facturaId, {
+                              abono_id: abonoId,
+                              estudiante_id,
+                              curso_id,
+                              valor: valorAbono,
+                              metodo,
+                              numero_factura: numeroFactura,
+                              fecha: fechaIso
+                            });
+                            res.json({
+                              mensaje:'Abono registrado y factura generada',
+                              factura: {
+                                id: facturaId,
+                                numero: numeroFactura,
+                                abono_id: abonoId,
+                                abrir_cajon: metodo === 'efectivo'
+                              }
+                            });
+                          });
+                        }
+                      );
+                    });
+                  });
+                });
+              });
+            });
+          });
+        }
+      );
+    });
+  });
 /* EDITAR ABONO (SOLO GERENTE) - blindaje: secretaria no puede modificar montos */
 app.put('/api/abonos/:id',
   verificarToken,
   permitirRoles('gerente'),
   (req, res) => {
-    const { valor, nota, metodo_pago, numero_factura, fecha } = req.body;
+    const { valor, nota, metodo_pago, fecha } = req.body;
     const idAbono = req.params.id;
 
-    const numeroFactura = (numero_factura || '').toString().trim();
-    if (!numeroFactura) return res.status(400).json({ mensaje: 'El número de factura es obligatorio al editar.' });
-
-    db.get('SELECT estudiante_id, curso_id, valor AS valor_anterior, fecha AS fecha_anterior FROM abonos WHERE id=?', [idAbono], (err, abono) => {
+    db.get('SELECT estudiante_id, curso_id, valor AS valor_anterior, fecha AS fecha_anterior, numero_factura, factura_id FROM abonos WHERE id=?', [idAbono], (err, abono) => {
       if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
 
       const valorNuevo = valor !== undefined ? Number(valor) : abono.valor_anterior;
+      if (!Number.isFinite(valorNuevo) || valorNuevo <= 0) return res.status(400).json({ mensaje: 'Valor invalido' });
       const diferencia = valorNuevo - Number(abono.valor_anterior);
 
       let fechaNueva = abono.fecha_anterior;
       if (fecha !== undefined && fecha !== null && String(fecha).trim() !== '') {
         const parsed = normalizarFechaAbono(fecha);
-        if (!parsed) return res.status(400).json({ mensaje: 'Fecha del abono inválida' });
+        if (!parsed) return res.status(400).json({ mensaje: 'Fecha del abono invalida' });
         fechaNueva = parsed;
       }
 
-      db.run(`
-        UPDATE abonos SET valor=?, nota=?, metodo_pago=?, numero_factura=?, fecha=?
-        WHERE id=?
-      `, [valorNuevo, nota || null, metodo_pago || 'efectivo', numeroFactura, fechaNueva, idAbono], function () {
-        if (this.changes === 0) return res.status(404).json({ mensaje: 'Abono no encontrado' });
-
-        db.run(
-          'UPDATE estudiante_cursos SET saldo = saldo - ? WHERE estudiante_id=? AND curso_id=?',
-          [diferencia, abono.estudiante_id, abono.curso_id],
-          () => {
-            registrarAuditoria(req, 'editar_abono', 'abonos', idAbono, {
-              valor_anterior: abono.valor_anterior,
-              valor_nuevo: valorNuevo,
-              fecha_anterior: abono.fecha_anterior,
-              fecha_nueva: fechaNueva
-            });
-            res.json({ mensaje: 'Abono actualizado' });
+      db.serialize(() => {
+        db.run('BEGIN IMMEDIATE TRANSACTION');
+        db.run(`
+          UPDATE abonos SET valor=?, nota=?, metodo_pago=?, fecha=?
+          WHERE id=?
+        `, [valorNuevo, nota || null, metodo_pago || 'efectivo', fechaNueva, idAbono], function (errUpdate) {
+          if (errUpdate) {
+            db.run('ROLLBACK');
+            return res.status(500).json({ mensaje: 'Error actualizando abono' });
           }
-        );
+          if (this.changes === 0) {
+            db.run('ROLLBACK');
+            return res.status(404).json({ mensaje: 'Abono no encontrado' });
+          }
+
+          db.run(
+            `UPDATE facturas SET valor=?, nota=?, metodo_pago=?, fecha=? WHERE abono_id=?`,
+            [valorNuevo, nota || null, metodo_pago || 'efectivo', fechaNueva, idAbono],
+            (errFactura) => {
+              if (errFactura) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ mensaje: 'Error actualizando factura' });
+              }
+
+              db.run(
+                'UPDATE estudiante_cursos SET saldo = saldo - ? WHERE estudiante_id=? AND curso_id=?',
+                [diferencia, abono.estudiante_id, abono.curso_id],
+                (errSaldo) => {
+                  if (errSaldo) {
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ mensaje: 'Error actualizando saldo' });
+                  }
+
+                  db.run('COMMIT', (errCommit) => {
+                    if (errCommit) return res.status(500).json({ mensaje: 'Error cerrando actualizacion' });
+                    registrarAuditoria(req, 'editar_abono_facturado', 'abonos', idAbono, {
+                      valor_anterior: abono.valor_anterior,
+                      valor_nuevo: valorNuevo,
+                      fecha_anterior: abono.fecha_anterior,
+                      fecha_nueva: fechaNueva,
+                      numero_factura: abono.numero_factura
+                    });
+                    res.json({ mensaje: 'Abono actualizado sin cambiar consecutivo de factura' });
+                  });
+                }
+              );
+            }
+          );
+        });
       });
     });
   });
-
 /* ELIMINAR ABONO (SOLO GERENTE) - blindaje: secretaria no puede borrar abonos */
 app.delete('/api/abonos/:id',
   verificarToken,
   permitirRoles('gerente'),
   (req, res) => {
-    db.get('SELECT estudiante_id, curso_id, valor FROM abonos WHERE id=?', [req.params.id], (err, abono) => {
+    db.get('SELECT estudiante_id, curso_id, valor, factura_id, numero_factura FROM abonos WHERE id=?', [req.params.id], (err, abono) => {
       if (err || !abono) return res.status(404).json({ mensaje: 'Abono no encontrado' });
+      if (abono.factura_id || abono.numero_factura) {
+        return res.status(400).json({ mensaje: 'Este abono ya tiene factura emitida y no puede eliminarse. Corrige el movimiento como gerente para conservar la trazabilidad.' });
+      }
 
       db.run('DELETE FROM abonos WHERE id=?', [req.params.id], function () {
         if (this.changes === 0) return res.status(404).json({ mensaje: 'Abono no encontrado' });
@@ -1811,6 +1982,64 @@ app.delete('/api/abonos/:id',
       });
     });
   });
+
+app.get('/api/facturas/:id',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const factura = await dbGet(`
+        SELECT
+          f.id,
+          f.numero,
+          f.tipo,
+          f.valor,
+          f.metodo_pago,
+          f.fecha,
+          f.nota,
+          f.estado,
+          f.abono_id,
+          e.id AS estudiante_id,
+          e.nombre AS estudiante,
+          e.cedula,
+          e.telefono,
+          c.nombre AS curso,
+          u.usuario AS usuario
+        FROM facturas f
+        JOIN estudiantes e ON e.id = f.estudiante_id
+        LEFT JOIN cursos c ON c.id = f.curso_id
+        LEFT JOIN usuarios u ON u.id = f.usuario_id
+        WHERE f.id=?
+      `, [req.params.id]);
+      if (!factura) return res.status(404).json({ mensaje: 'Factura no encontrada' });
+      res.json(factura);
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error consultando factura' });
+    }
+  }
+);
+
+app.post('/api/facturas/:id/abrir-cajon',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const factura = await dbGet('SELECT metodo_pago, numero FROM facturas WHERE id=?', [req.params.id]);
+      if (!factura) return res.status(404).json({ mensaje: 'Factura no encontrada' });
+      if (factura.metodo_pago !== 'efectivo') {
+        return res.json({ ok: false, mensaje: 'El cajon solo se abre automaticamente en pagos en efectivo' });
+      }
+      const resultado = await abrirCajonDinero();
+      registrarAuditoria(req, 'abrir_cajon_dinero', 'facturas', req.params.id, {
+        numero_factura: factura.numero,
+        resultado
+      });
+      res.json(resultado);
+    } catch (err) {
+      res.status(500).json({ ok: false, mensaje: 'Error abriendo cajon' });
+    }
+  }
+);
 
 /* =====================================================
    CIERRE DE CAJA - DATOS DEL SISTEMA

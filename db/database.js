@@ -87,6 +87,7 @@ db.run(`
     rol TEXT,
     metodo_pago TEXT DEFAULT 'efectivo',
     numero_factura TEXT,
+    factura_id INTEGER,
     FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
     FOREIGN KEY (curso_id) REFERENCES cursos(id)
   )
@@ -98,6 +99,9 @@ db.run(`ALTER TABLE abonos ADD COLUMN metodo_pago TEXT DEFAULT 'efectivo'`, (err
 });
 db.run(`ALTER TABLE abonos ADD COLUMN numero_factura TEXT`, (err) => {
   if (err && !err.message.includes('duplicate column')) console.log('abonos.numero_factura:', err.message);
+});
+db.run(`ALTER TABLE abonos ADD COLUMN factura_id INTEGER REFERENCES facturas(id)`, (err) => {
+  if (err && !err.message.includes('duplicate column')) console.log('abonos.factura_id:', err.message);
 });
 // Estudiantes: nuevos campos matrícula
 db.run(`ALTER TABLE estudiantes ADD COLUMN email TEXT`, (err) => {
@@ -127,6 +131,32 @@ db.run(`
   CREATE TABLE IF NOT EXISTS config (
     clave TEXT PRIMARY KEY,
     valor TEXT
+  )
+`);
+db.run(`INSERT OR IGNORE INTO config (clave, valor) VALUES ('factura_siguiente', '1')`);
+
+/* =========================
+   FACTURAS / RECIBOS POS
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS facturas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero TEXT UNIQUE NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'ingreso',
+    estudiante_id INTEGER NOT NULL,
+    curso_id INTEGER,
+    abono_id INTEGER UNIQUE,
+    valor INTEGER NOT NULL,
+    metodo_pago TEXT NOT NULL DEFAULT 'efectivo',
+    fecha TEXT NOT NULL,
+    usuario_id INTEGER,
+    nota TEXT,
+    estado TEXT NOT NULL DEFAULT 'emitida',
+    creado_en TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
+    FOREIGN KEY (curso_id) REFERENCES cursos(id),
+    FOREIGN KEY (abono_id) REFERENCES abonos(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
   )
 `);
 db.run(`

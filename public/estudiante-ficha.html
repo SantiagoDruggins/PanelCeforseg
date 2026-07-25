@@ -197,10 +197,7 @@ async function cargarFicha(){
     <div class="card mb-4 shadow-sm">
       <div class="card-body">
         <h5><i class="bi bi-cash-coin me-2"></i>Registrar abono</h5>
-        <p class="text-muted small mb-2">Todo movimiento de dinero debe tener número de factura.</p>
-
-        <label class="form-label fw-bold">Número de factura <span class="text-danger">*</span></label>
-        <input id="numero_factura" class="form-control mb-2" placeholder="Ej: FAC 5693" required>
+        <p class="text-muted small mb-2">El consecutivo de factura se genera automatico y se imprime al guardar.</p>
 
         <label class="form-label fw-bold">Fecha del abono</label>
         <input type="date" id="fecha_abono" class="form-control mb-2" title="Día en que aplica el movimiento (caja / historial)">
@@ -341,6 +338,7 @@ async function cargarAbonos(){
         <td>${a.usuario || '-'}</td>
         <td class="btns-abono">
           ${localStorage.getItem('rol') === 'gerente' ? `
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="imprimirFactura(${a.factura_id || 0})">Imprimir</button>
           <button class="btn btn-sm btn-outline-secondary me-1" onclick="editarAbonoDesdeFila(this)">Editar</button>
           <button class="btn btn-sm btn-outline-danger" onclick="eliminarAbono(${a.id})">Eliminar</button>
           ` : '<span class="text-muted small">Solo gerente puede editar/eliminar</span>'}
@@ -351,16 +349,11 @@ async function cargarAbonos(){
 }
 
 async function registrarAbono(){
-  const numero_factura = document.getElementById('numero_factura').value.trim();
   const curso_id = document.getElementById('curso_id').value;
   const valor = document.getElementById('valor').value;
   const nota = document.getElementById('nota').value;
   const metodo_pago = document.getElementById('metodo_pago').value;
 
-  if(!numero_factura){
-    alert('El número de factura es obligatorio');
-    return;
-  }
   if(!curso_id || !valor){
     alert('Seleccione curso y valor');
     return;
@@ -378,18 +371,27 @@ async function registrarAbono(){
       valor,
       nota,
       metodo_pago,
-      numero_factura,
       fecha: document.getElementById('fecha_abono').value
     })
   });
   const data = await res.json();
   if(!res.ok){ alert(data.mensaje || 'Error'); return; }
-  document.getElementById('numero_factura').value = '';
   document.getElementById('valor').value = '';
   document.getElementById('nota').value = '';
   const fa = document.getElementById('fecha_abono');
   if(fa) fa.value = new Date().toISOString().slice(0, 10);
+  if(data.factura && data.factura.id){
+    window.open('/factura-pos.html?id=' + data.factura.id, '_blank', 'width=420,height=720');
+  }
   cargarFicha();
+}
+
+function imprimirFactura(facturaId){
+  if(!facturaId){
+    alert('Este abono aun no tiene factura POS vinculada.');
+    return;
+  }
+  window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
 }
 
 function editarAbonoDesdeFila(btn){
@@ -398,14 +400,10 @@ function editarAbonoDesdeFila(btn){
   const valor = row.getAttribute('data-valor');
   const nota = row.getAttribute('data-nota') || '';
   const metodo = row.getAttribute('data-metodo') || 'efectivo';
-  const factura = row.getAttribute('data-factura') || '';
   const fechaRow = (row.getAttribute('data-fecha') || '').trim();
 
   const v = prompt('Valor del abono:', valor);
   if(v === null) return;
-  const n = prompt('Número de factura (obligatorio):', factura);
-  if(n === null) return;
-  if(!n.trim()){ alert('El número de factura es obligatorio.'); return; }
   const fe = prompt('Fecha del abono (AAAA-MM-DD):', fechaRow || new Date().toISOString().slice(0, 10));
   if(fe === null) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test((fe || '').trim())){ alert('Usa el formato AAAA-MM-DD para la fecha.'); return; }
@@ -417,7 +415,7 @@ function editarAbonoDesdeFila(btn){
   fetch('/api/abonos/' + idAbono, {
     method:'PUT',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
-    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, numero_factura: n, fecha: fe.trim() })
+    body: JSON.stringify({ valor: v, nota: no, metodo_pago: met, fecha: fe.trim() })
   }).then(r=>r.json()).then(data=>{
     alert(data.mensaje || 'Actualizado');
     cargarFicha();

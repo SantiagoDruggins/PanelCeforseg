@@ -92,6 +92,29 @@ fetch('/layout.html')
                 <h6 class="mb-2">📚 Cursos a matricular</h6>
                 <div id="listaCursos" class="ms-2"></div>
 
+                <hr>
+                <h6 class="mb-2">Pago inicial / abono de matricula</h6>
+                <p class="text-muted small mb-2">Si entra dinero en la matricula, se genera factura POS automatica.</p>
+                <div class="row g-2">
+                  <div class="col-md-4">
+                    <input class="form-control" id="abonoInicialValor" type="number" min="0" placeholder="Valor pagado">
+                  </div>
+                  <div class="col-md-4">
+                    <select class="form-select" id="abonoInicialCurso">
+                      <option value="">Curso del pago</option>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <select class="form-select" id="abonoInicialMetodo">
+                      <option value="efectivo">Efectivo</option>
+                      <option value="nequi">Nequi</option>
+                      <option value="Daviplata">Daviplata</option>
+                      <option value="Bancolombia">Transferencia - Bancolombia</option>
+                      <option value="Otro banco">Transferencia - Otro banco</option>
+                    </select>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
@@ -168,6 +191,7 @@ async function cargarCursos(){
   });
   const cursos = await res.json();
   const cont = document.getElementById('listaCursos');
+  const selectAbono = document.getElementById('abonoInicialCurso');
 
   cursos.forEach(c=>{
     cont.innerHTML += `
@@ -178,6 +202,9 @@ async function cargarCursos(){
         </label>
       </div>
     `;
+    if(selectAbono){
+      selectAbono.innerHTML += `<option value="${c.id}">${c.nombre}</option>`;
+    }
   });
 }
 
@@ -191,6 +218,20 @@ function registrarSubmit(){
       return;
     }
 
+    const abonoInicial = Number(document.getElementById('abonoInicialValor').value || 0);
+    const cursoAbonoInicial = document.getElementById('abonoInicialCurso').value;
+    if(abonoInicial > 0 && !cursoAbonoInicial){
+      alert('Seleccione el curso al que aplica el pago inicial');
+      return;
+    }
+    if(abonoInicial > 0){
+      const cursoMarcado = document.querySelector(`input[name="curso_ids[]"][value="${cursoAbonoInicial}"]`);
+      if(!cursoMarcado || !cursoMarcado.checked){
+        alert('El curso del pago inicial tambien debe estar marcado en la matricula');
+        return;
+      }
+    }
+
     const formData = new FormData(e.target);
 
     const res = await fetch('/api/estudiantes',{
@@ -201,6 +242,29 @@ function registrarSubmit(){
 
     const data = await res.json();
     alert(data.mensaje);
+    if (data.id && abonoInicial > 0) {
+      const pagoRes = await fetch('/api/abonos',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer '+token
+        },
+        body: JSON.stringify({
+          estudiante_id: data.id,
+          curso_id: cursoAbonoInicial,
+          valor: abonoInicial,
+          metodo_pago: document.getElementById('abonoInicialMetodo').value,
+          nota: 'Pago inicial en matricula',
+          fecha: formData.get('fecha_matricula') || new Date().toISOString().slice(0, 10)
+        })
+      });
+      const pagoData = await pagoRes.json();
+      if(!pagoRes.ok){
+        alert(pagoData.mensaje || 'Estudiante creado, pero no se pudo facturar el pago inicial');
+      }else if(pagoData.factura && pagoData.factura.id){
+        window.open('/factura-pos.html?id=' + pagoData.factura.id, '_blank', 'width=420,height=720');
+      }
+    }
     if (data.id) {
       window.open('/ficha-imprimir?id=' + data.id, '_blank', 'width=900,height=800');
     }
