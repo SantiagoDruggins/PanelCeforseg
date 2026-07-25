@@ -1996,6 +1996,7 @@ app.get('/api/facturas/:id',
           f.valor,
           f.metodo_pago,
           f.fecha,
+          f.creado_en,
           f.nota,
           f.estado,
           f.abono_id,
@@ -2004,7 +2005,8 @@ app.get('/api/facturas/:id',
           e.cedula,
           e.telefono,
           c.nombre AS curso,
-          u.usuario AS usuario
+          u.usuario AS usuario,
+          u.rol AS usuario_rol
         FROM facturas f
         JOIN estudiantes e ON e.id = f.estudiante_id
         LEFT JOIN cursos c ON c.id = f.curso_id

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Factura POS - CEFORSEG</title>
+<title>Factura POS - DENVER LTDA</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 *{box-sizing:border-box}
@@ -42,6 +42,13 @@ body{
   line-height:1.25;
 }
 .center{text-align:center}
+.logo{
+  width:34px;
+  max-height:34px;
+  object-fit:contain;
+  display:block;
+  margin:0 auto 2px;
+}
 .brand{
   font-size:18px;
   font-weight:800;
@@ -133,10 +140,32 @@ function escapeHtml(value){
     .replace(/"/g,'&quot;');
 }
 
+function parseFechaLocal(fecha){
+  if(!fecha) return null;
+  if(typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(fecha)){
+    return new Date(fecha.replace(' ', 'T'));
+  }
+  return new Date(fecha);
+}
+
 function fechaLocal(fecha){
-  const d = new Date(fecha);
+  const d = parseFechaLocal(fecha);
   if(Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('es-CO', { dateStyle:'short', timeStyle:'short' });
+  return d.toLocaleString('es-CO', {
+    timeZone:'America/Bogota',
+    year:'numeric',
+    month:'2-digit',
+    day:'2-digit',
+    hour:'2-digit',
+    minute:'2-digit',
+    hour12:true
+  });
+}
+
+function rolUsuario(data){
+  const rol = (data.usuario_rol || data.rol || '').toString().trim();
+  if(!rol) return '-';
+  return rol.charAt(0).toUpperCase() + rol.slice(1);
 }
 
 async function cargarFactura(){
@@ -157,7 +186,8 @@ async function cargarFactura(){
   facturaActual = data;
   document.getElementById('ticket').innerHTML = `
     <section class="center">
-      <div class="brand">CEFORSEG</div>
+      <img class="logo" src="/assets/logo-denver.png" alt="Logo Denver LTDA">
+      <div class="brand">DENVER LTDA</div>
       <div class="muted">Factura POS de ingreso</div>
       <span class="estado">${escapeHtml(data.estado || 'emitida').toUpperCase()}</span>
     </section>
@@ -165,8 +195,8 @@ async function cargarFactura(){
     <div class="numero">${escapeHtml(data.numero)}</div>
 
     <section class="block">
-      <div class="row"><span class="label">Fecha</span><span class="value">${fechaLocal(data.fecha)}</span></div>
-      <div class="row"><span class="label">Cajero</span><span class="value">${escapeHtml(data.usuario || '-')}</span></div>
+      <div class="row"><span class="label">Fecha</span><span class="value">${fechaLocal(data.creado_en || data.fecha)}</span></div>
+      <div class="row"><span class="label">Cajero</span><span class="value">${escapeHtml(rolUsuario(data))}</span></div>
       <div class="row"><span class="label">Metodo</span><span class="value">${escapeHtml(data.metodo_pago || '-')}</span></div>
     </section>
 
