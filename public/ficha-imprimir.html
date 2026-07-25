@@ -2,181 +2,386 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>ACTA DE MATRÍCULA - CEFORSEG</title>
+  <title>Ficha de matricula - DENVER LTDA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Arial, sans-serif; background: #ddd; padding: 16px; }
-    .no-print { margin-bottom: 16px; }
-    @media print {
-      body { background: #fff; padding: 0; }
-      .no-print { display: none !important; }
-      .ficha-container { box-shadow: none !important; margin: 0 !important; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #d7d9dd;
+      color: #111;
+      font-family: Arial, Helvetica, sans-serif;
     }
-    .ficha-container {
-      position: relative;
-      width: 210mm;
-      min-height: 297mm;
+    .no-print {
+      max-width: 216mm;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .no-print a, .no-print button {
+      border: 1px solid #0a3b78;
+      background: #fff;
+      color: #0a3b78;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .no-print button {
+      background: #0a3b78;
+      color: #fff;
+    }
+    .sheet {
+      width: 216mm;
+      min-height: 279mm;
       margin: 0 auto;
-      background-size: 100% auto;
-      background-repeat: no-repeat;
-      background-position: top center;
-      background-color: #fff;
-      box-shadow: 0 2px 12px rgba(0,0,0,.2);
-      overflow: hidden;
+      padding: 12mm;
+      background: #fff;
+      border: 2px solid #111;
+      box-shadow: 0 2px 14px rgba(0,0,0,.24);
     }
-    .ficha-plantilla {
-      position: absolute;
-      top: 0;
-      left: 0;
+    .header {
+      display: grid;
+      grid-template-columns: 30mm 1fr 38mm;
+      gap: 8mm;
+      align-items: start;
+      border-bottom: 2px solid #111;
+      padding-bottom: 7mm;
+    }
+    .logo {
+      width: 25mm;
+      height: 25mm;
+      object-fit: contain;
+    }
+    .title {
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .title .school {
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+    .title .name {
+      margin-top: 3mm;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+    .title .nit {
+      margin-top: 2mm;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .photo-box {
+      width: 35mm;
+      height: 45mm;
+      border: 1.5px solid #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-size: 11px;
+      text-align: center;
+      color: #555;
+    }
+    .photo-box img {
       width: 100%;
       height: 100%;
-      object-fit: fill; /* Mantiene escala para que el POS funcione */
-      z-index: 1;
+      object-fit: cover;
     }
-    .ficha-overlay {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%;
-      min-height: 297mm;
-      padding: 0;
-      pointer-events: none;
-      z-index: 2;
+    .meta {
+      margin-top: 6mm;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      border: 1.5px solid #111;
+      border-bottom: 0;
     }
-    .ficha-overlay .campo {
-      position: absolute;
+    .field {
+      min-height: 12mm;
+      border-right: 1.5px solid #111;
+      border-bottom: 1.5px solid #111;
+      padding: 2mm 2.5mm;
+    }
+    .field:nth-child(3n) { border-right: 0; }
+    .label {
+      display: block;
+      margin-bottom: 1.5mm;
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .value {
       font-size: 13px;
-      line-height: 1.2;
-      color: #000;
-      white-space: pre-wrap;
+      font-weight: 600;
       word-break: break-word;
     }
-    .ficha-overlay .foto-estudiante {
-      position: absolute;
-      width: 108px;
-      height: 138px;
-      object-fit: cover;
-      border: 1px solid #333;
+    .wide { grid-column: span 2; }
+    .full { grid-column: 1 / -1; }
+    .section-title {
+      margin: 7mm 0 2.5mm;
+      padding: 2mm 3mm;
+      background: #111;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0;
     }
-    .ficha-overlay .cursos-list { font-size: 12px; line-height: 1.25; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1.4px solid #111;
+      padding: 2.5mm;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f0f1f3;
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 900;
+    }
+    .right { text-align: right; }
+    .summary {
+      margin-top: 4mm;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1.5px solid #111;
+      border-right: 0;
+    }
+    .summary .box {
+      padding: 3mm;
+      border-right: 1.5px solid #111;
+      text-align: center;
+    }
+    .summary .box span {
+      display: block;
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .summary .box strong {
+      display: block;
+      margin-top: 1mm;
+      font-size: 16px;
+    }
+    .signatures {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18mm;
+      margin-top: 18mm;
+    }
+    .sig {
+      border-top: 1.5px solid #111;
+      padding-top: 2mm;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .footer {
+      margin-top: 8mm;
+      font-size: 9px;
+      text-align: center;
+      color: #333;
+    }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .no-print { display: none !important; }
+      .sheet {
+        width: 216mm;
+        min-height: 279mm;
+        margin: 0;
+        box-shadow: none;
+        border: 2px solid #111;
+      }
+      @page { size: letter; margin: 0; }
+    }
   </style>
 </head>
 <body>
-
   <div class="no-print">
-    <a href="#" id="btnVolver">← Volver</a>
-    <button type="button" onclick="window.print()" style="margin-left:12px; padding:10px 20px; cursor:pointer; background:#0a3b78; color:#fff; border:none; border-radius:6px;">
-      Imprimir acta de matrícula
-    </button>
-    <p id="msgCarga" class="text-muted"></p>
-    <p class="small text-muted mt-2">Ficha en blanco: <strong>public/assets/ficha-matricula-blanca.png</strong> (o .jpg). Ajuste el objeto POS en este archivo si algún campo no coincide.</p>
+    <a href="#" id="btnVolver">Volver a ficha</a>
+    <button type="button" onclick="window.print()">Imprimir ficha de matricula</button>
+    <span id="msgCarga"></span>
   </div>
 
-  <div id="fichaContainer" class="ficha-container">
-    <img id="fichaPlantilla" class="ficha-plantilla" alt="Plantilla de matrícula" src="/assets/ficha-matricula-blanca.png">
-  </div>
+  <main class="sheet" id="sheet">
+    <div id="contenido">Cargando ficha...</div>
+  </main>
 
 <script src="/permisos.js"></script>
 <script>
 (function() {
   if (!localStorage.getItem('token')) { location.href = '/login'; return; }
   if (bloquearModuloAliado('Ficha de matricula')) return;
+
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
-  if (!id) { document.getElementById('msgCarga').textContent = 'Falta id del estudiante. Use: /ficha-imprimir?id=123'; return; }
-
-  /* Posiciones para ACTA DE MATRÍCULA CEFORSEG (alineadas al formulario escaneado) */
-  const POS = {
-    fecha:     { top: '9.5%',  left: '76%' },   /* FECHA (3 cajitas arriba a la derecha) */
-    nombre:    { top: '23%',   left: '31.5%', maxWidth: '72%' }, /* NOMBRES Y APELLIDOS (-0.2cm arriba) */
-    cedula:    { top: '25.77%', left: '33.7%' }, /* CÉDULA N.º: -0.01cm arriba (muy mínimo) */
-    ciudad:    { top: '27.7%', left: '57.1%' }, /* CIUDAD: +0.01cm abajo, +0.1cm derecha (muy mínimo) */
-    direccion: { top: '34%',   left: '31.5%', maxWidth: '68%' }, /* DIRECCIÓN: -0.9cm arriba */
-    telefono:  { top: '34%',    left: '60.9%' }, /* TEL / CEL: -0.1cm arriba */
-    email:     { top: '29.5%', left: '22%', maxWidth: '58%' },  /* EMAIL */
-    contacto:  { top: '33.5%', left: '22%', maxWidth: '68%' },  /* EN CASO DE ACCIDENTE INFORMAR A */
-    cursos:    { top: '46.6%', left: '23.5%', maxWidth: '52%' }, /* cuadro cursos: -0.1cm arriba más */
-    foto:      { top: '6.3%',  left: '80.6%' },  /* FOTOS 3X4: -0.5cm izq, -0.5cm arriba */
-  };
-
   const token = localStorage.getItem('token');
-  const container = document.getElementById('fichaContainer');
   const msg = document.getElementById('msgCarga');
+  const contenido = document.getElementById('contenido');
 
-  fetch('/api/estudiantes/' + id, { headers: { Authorization: 'Bearer ' + token } })
-    .then(r => r.json())
-    .then(e => {
-      if (!e.id) { msg.textContent = 'Estudiante no encontrado'; return; }
-
-      // Usamos <img> para que la plantilla se imprima siempre (a diferencia de background-image).
-      const imgPlantilla = document.getElementById('fichaPlantilla');
-      imgPlantilla.src = '/assets/ficha-matricula-blanca.png';
-      imgPlantilla.onerror = function() {
-        imgPlantilla.onerror = null;
-        imgPlantilla.src = '/assets/ficha-matricula-blanca.jpg';
-      };
-
-      const cursosTexto = (e.cursos && e.cursos.length)
-        ? e.cursos.map(c => c.nombre).join('  •  ')
-        : '—';
-
-      const fmtFecha = (f) => {
-        if (!f) return '—';
-        const d = new Date(f + 'T12:00:00');
-        if (isNaN(d.getTime())) return f;
-        return d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear();
-      };
-
-      const overlay = document.createElement('div');
-      overlay.className = 'ficha-overlay';
-
-      const campos = [
-        { value: fmtFecha(e.fecha_matricula), pos: POS.fecha },
-        { value: e.nombre || '—', pos: POS.nombre },
-        { value: e.cedula || '—', pos: POS.cedula },
-        { value: e.ciudad || '—', pos: POS.ciudad },
-        { value: e.direccion || '—', pos: POS.direccion },
-        { value: e.telefono || '—', pos: POS.telefono },
-        { value: e.email || '—', pos: POS.email },
-        { value: e.contacto_emergencia || '—', pos: POS.contacto }
-      ];
-
-      campos.forEach(({ value, pos }) => {
-        const el = document.createElement('div');
-        el.className = 'campo';
-        el.style.top = pos.top;
-        el.style.left = pos.left;
-        if (pos.maxWidth) el.style.maxWidth = pos.maxWidth;
-        el.textContent = value;
-        overlay.appendChild(el);
-      });
-
-      const cursosEl = document.createElement('div');
-      cursosEl.className = 'campo cursos-list';
-      cursosEl.style.top = POS.cursos.top;
-      cursosEl.style.left = POS.cursos.left;
-      if (POS.cursos.maxWidth) cursosEl.style.maxWidth = POS.cursos.maxWidth;
-      cursosEl.textContent = cursosTexto;
-      overlay.appendChild(cursosEl);
-
-      if (e.foto) {
-        const img = document.createElement('img');
-        img.className = 'foto-estudiante';
-        img.src = e.foto;
-        img.alt = 'Foto';
-        img.style.top = POS.foto.top;
-        img.style.left = POS.foto.left;
-        overlay.appendChild(img);
-      }
-
-      container.appendChild(overlay);
-      msg.textContent = 'Listo. Use "Imprimir acta de matrícula" o Ctrl+P.';
-    })
-    .catch(() => { msg.textContent = 'Error al cargar datos'; });
+  if (!id) {
+    contenido.textContent = 'Falta id del estudiante. Use: /ficha-imprimir?id=123';
+    return;
+  }
 
   document.getElementById('btnVolver').href = '/estudiante-ficha?id=' + id;
+
+  function escapeHtml(value){
+    return String(value == null || value === '' ? '-' : value)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  function formatCOP(n){
+    return '$' + Number(n || 0).toLocaleString('es-CO') + ' COP';
+  }
+
+  function fechaCorta(value){
+    if(!value) return '-';
+    const raw = String(value);
+    const d = raw.length === 10 ? new Date(raw + 'T12:00:00') : new Date(raw);
+    if(Number.isNaN(d.getTime())) return raw.slice(0, 10);
+    return d.toLocaleDateString('es-CO', { year:'numeric', month:'2-digit', day:'2-digit' });
+  }
+
+  function renderCursos(cursos){
+    if(!cursos || !cursos.length){
+      return '<tr><td colspan="4">Sin cursos matriculados</td></tr>';
+    }
+    return cursos.map(c => `
+      <tr>
+        <td>${escapeHtml(c.nombre)}</td>
+        <td class="right">${formatCOP(c.precio)}</td>
+        <td class="right">${formatCOP(Number(c.precio || 0) - Number(c.saldo || 0))}</td>
+        <td class="right">${formatCOP(c.saldo)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderPagos(abonos){
+    if(!abonos || !abonos.length){
+      return '<tr><td colspan="5">Sin pagos registrados</td></tr>';
+    }
+    return abonos.map(a => `
+      <tr>
+        <td>${fechaCorta(a.fecha)}</td>
+        <td>${escapeHtml(a.numero_factura || '-')}</td>
+        <td>${escapeHtml(a.curso || '-')}</td>
+        <td>${escapeHtml(a.metodo_pago || 'efectivo')}</td>
+        <td class="right">${formatCOP(a.valor)}</td>
+      </tr>
+    `).join('');
+  }
+
+  Promise.all([
+    fetch('/api/estudiantes/' + id, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()),
+    fetch('/api/abonos/' + id, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json())
+  ])
+    .then(([e, abonos]) => {
+      if (!e.id) {
+        contenido.textContent = 'Estudiante no encontrado';
+        return;
+      }
+
+      const cursos = e.cursos || [];
+      const pagos = Array.isArray(abonos) ? abonos : [];
+      const totalCursos = cursos.reduce((sum, c) => sum + Number(c.precio || 0), 0);
+      const saldoTotal = cursos.reduce((sum, c) => sum + Number(c.saldo || 0), 0);
+      const totalPagado = pagos.reduce((sum, a) => sum + Number(a.valor || 0), 0);
+      const foto = e.foto
+        ? `<img src="${escapeHtml(e.foto)}" alt="Foto del alumno">`
+        : 'Foto del alumno';
+
+      contenido.innerHTML = `
+        <header class="header">
+          <div>
+            <img class="logo" src="/assets/logo-denver.png" alt="Denver LTDA">
+          </div>
+          <div class="title">
+            <div class="school">Escuela de capacitacion en vigilancia y seguridad privada</div>
+            <div class="name">DENVER LTDA</div>
+            <div class="nit">NIT 901156976-1</div>
+            <div class="name" style="font-size:19px;margin-top:5mm;">Acta de matricula</div>
+          </div>
+          <div class="photo-box">${foto}</div>
+        </header>
+
+        <section class="meta">
+          <div class="field"><span class="label">Fecha matricula</span><div class="value">${fechaCorta(e.fecha_matricula)}</div></div>
+          <div class="field"><span class="label">Codigo alumno</span><div class="value">#${escapeHtml(e.id)}</div></div>
+          <div class="field"><span class="label">Estado</span><div class="value">${escapeHtml(e.estado || 'activo')}</div></div>
+
+          <div class="field wide"><span class="label">Nombres y apellidos</span><div class="value">${escapeHtml(e.nombre)}</div></div>
+          <div class="field"><span class="label">Cedula</span><div class="value">${escapeHtml(e.cedula)}</div></div>
+
+          <div class="field"><span class="label">Telefono</span><div class="value">${escapeHtml(e.telefono)}</div></div>
+          <div class="field"><span class="label">Ciudad</span><div class="value">${escapeHtml(e.ciudad)}</div></div>
+          <div class="field"><span class="label">Correo electronico</span><div class="value">${escapeHtml(e.email)}</div></div>
+
+          <div class="field wide"><span class="label">Direccion de residencia</span><div class="value">${escapeHtml(e.direccion)}</div></div>
+          <div class="field"><span class="label">Contacto emergencia</span><div class="value">${escapeHtml(e.contacto_emergencia)}</div></div>
+        </section>
+
+        <div class="section-title">Cursos matriculados</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Curso</th>
+              <th class="right">Valor</th>
+              <th class="right">Pagado</th>
+              <th class="right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>${renderCursos(cursos)}</tbody>
+        </table>
+
+        <div class="section-title">Pagos / abonos registrados</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Factura</th>
+              <th>Curso</th>
+              <th>Metodo</th>
+              <th class="right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>${renderPagos(pagos)}</tbody>
+        </table>
+
+        <section class="summary">
+          <div class="box"><span>Valor matriculado</span><strong>${formatCOP(totalCursos)}</strong></div>
+          <div class="box"><span>Total pagado</span><strong>${formatCOP(totalPagado)}</strong></div>
+          <div class="box"><span>Saldo pendiente</span><strong>${formatCOP(saldoTotal)}</strong></div>
+        </section>
+
+        <section class="signatures">
+          <div class="sig">Firma del alumno / acudiente</div>
+          <div class="sig">Firma funcionario autorizado</div>
+        </section>
+
+        <footer class="footer">
+          Ficha generada desde el sistema con los datos registrados del alumno. Todo pago debe tener factura consecutiva.
+        </footer>
+      `;
+      msg.textContent = 'Ficha lista para imprimir.';
+    })
+    .catch(() => {
+      contenido.textContent = 'Error al cargar datos de la ficha';
+    });
 })();
 </script>
-
 </body>
 </html>
