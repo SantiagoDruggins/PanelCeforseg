@@ -236,6 +236,15 @@ fetch('/layout.html')
           </div>
         </div>
         <div class="col-md-4">
+          <div class="card shadow rounded-3 card-acceso border-warning">
+            <a href="/impresora">
+              <div class="icono"><i class="bi bi-printer"></i></div>
+              <h5 class="mt-2">Impresora POS</h5>
+              <small class="text-muted">Configurar JAL821, probar factura y cajon</small>
+            </a>
+          </div>
+        </div>
+        <div class="col-md-4">
           <div class="card shadow rounded-3 card-acceso">
             <a href="/certificados-panel">
               <div class="icono"><i class="bi bi-file-earmark-text"></i></div>
@@ -324,6 +333,10 @@ fetch('/layout.html')
     content.innerHTML = `
       <h3 class="fw-bold mb-3"><i class="bi bi-shield-check me-2"></i>Auditoría y caja</h3>
       <p class="text-muted mb-4">Vista gerente: caja, movimientos y totales.</p>
+      <div class="d-flex flex-wrap gap-2 mb-4">
+        <a href="/impresora" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Configurar impresora POS</a>
+        <button type="button" class="btn btn-outline-warning" onclick="abrirCajonManual()"><i class="bi bi-safe2 me-1"></i>Abrir caja</button>
+      </div>
 
       <div id="alertaCierre" class="alert alert-warning d-none mb-3">Aún no hay cierre de caja hoy. Revisa con la secretaria.</div>
       <div id="alertaCierreOk" class="alert alert-success d-none mb-3">Cierre de caja del día registrado.</div>

@@ -224,13 +224,32 @@ async function cargarFactura(){
     </section>
   `;
 
-  setTimeout(async () => {
-    if(data.metodo_pago === 'efectivo') await abrirCajon(true);
-    imprimir();
-  }, 500);
+  setTimeout(() => imprimir(), 500);
 }
 
-function imprimir(){
+async function imprimir(){
+  if(!facturaId){
+    window.print();
+    return;
+  }
+
+  try{
+    const res = await fetch('/api/facturas/' + facturaId + '/imprimir-pos', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        Authorization:'Bearer ' + token
+      },
+      body: JSON.stringify({ abrir_cajon: facturaActual && facturaActual.metodo_pago === 'efectivo' })
+    });
+    const data = await res.json();
+    if(data && data.ok) return;
+    if(data && data.mensaje && !/Configura POS_PRINTER_HOST|POS_PRINTER_SHARE/.test(data.mensaje)){
+      alert(data.mensaje);
+    }
+  }catch(err){}
+
+  if(facturaActual && facturaActual.metodo_pago === 'efectivo') await abrirCajon(true);
   window.print();
 }
 

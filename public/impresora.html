@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Impresora POS - CEFORSEG</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+</head>
+<body>
+<script>
+if(!localStorage.getItem('token')) location.href='/login';
+</script>
+
+<div id="app"></div>
+
+<script src="/permisos.js"></script>
+<script>
+const token = localStorage.getItem('token');
+const rol = localStorage.getItem('rol') || '';
+
+function headers(json){
+  const h = { Authorization:'Bearer ' + token };
+  if(json) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+async function leerJson(res){
+  const data = await res.json().catch(() => ({}));
+  if(res.status === 401){
+    localStorage.removeItem('token');
+    localStorage.removeItem('rol');
+    localStorage.removeItem('usuario');
+    location.href = '/login';
+    throw new Error(data.mensaje || 'Sesion vencida');
+  }
+  return data;
+}
+
+function mostrarMensaje(tipo, texto){
+  const box = document.getElementById('msg');
+  box.className = 'alert alert-' + tipo;
+  box.textContent = texto;
+  box.classList.remove('d-none');
+}
+
+function modoSeleccionado(){
+  return document.querySelector('input[name="modo"]:checked').value;
+}
+
+function actualizarModo(){
+  const modo = modoSeleccionado();
+  document.getElementById('redBox').classList.toggle('d-none', modo !== 'red');
+  document.getElementById('shareBox').classList.toggle('d-none', modo !== 'share');
+}
+
+async function cargarConfig(){
+  const res = await fetch('/api/impresora/config', { headers: headers() });
+  const data = await leerJson(res);
+  if(!res.ok){
+    mostrarMensaje('danger', data.mensaje || 'No se pudo cargar la configuracion.');
+    return;
+  }
+  document.getElementById('host').value = data.host || '';
+  document.getElementById('port').value = data.port || 9100;
+  document.getElementById('share').value = data.share || 'JAL821';
+  document.getElementById(data.host ? 'modoRed' : 'modoShare').checked = true;
+  actualizarModo();
+  document.getElementById('estado').innerHTML = data.configurada
+    ? `<span class="badge text-bg-success">Configurada: ${data.modo}</span>`
+    : '<span class="badge text-bg-warning">Pendiente</span>';
+}
+
+async function guardarConfig(){
+  if(rol !== 'gerente'){
+    mostrarMensaje('warning', 'Solo el gerente puede cambiar la configuracion.');
+    return;
+  }
+  const modo = modoSeleccionado();
+  const body = {
+    host: modo === 'red' ? document.getElementById('host').value.trim() : '',
+    port: Number(document.getElementById('port').value || 9100),
+    share: modo === 'share' ? document.getElementById('share').value.trim() : ''
+  };
+  const res = await fetch('/api/impresora/config', {
+    method:'PUT',
+    headers: headers(true),
+    body: JSON.stringify(body)
+  });
+  const data = await leerJson(res);
+  if(!res.ok){
+    mostrarMensaje('danger', data.mensaje || 'No se pudo guardar.');
+    return;
+  }
+  mostrarMensaje('success', 'Configuracion guardada. Ahora imprime una prueba.');
+  cargarConfig();
+}
+
+async function probar(abrirCajon){
+  const res = await fetch('/api/impresora/prueba', {
+    method:'POST',
+    headers: headers(true),
+    body: JSON.stringify({ abrir_cajon: abrirCajon })
+  });
+  const data = await leerJson(res);
+  if(data.ok){
+    mostrarMensaje('success', abrirCajon ? 'Prueba enviada y pulso de cajon ejecutado.' : 'Prueba enviada a la impresora.');
+  }else{
+    mostrarMensaje('danger', data.mensaje || 'No se pudo imprimir la prueba.');
+  }
+}
+
+fetch('/layout.html')
+.then(r=>r.text())
+.then(html=>{
+  document.getElementById('app').innerHTML = html;
+  aplicarPermisosPanel();
+  const content = document.querySelector('.content');
+  content.innerHTML = `
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-printer me-2"></i>Impresora POS</h3>
+        <p class="text-muted mb-0">JALTECH JAL821, papel termico 80 mm, factura, corte y cajon.</p>
+      </div>
+      <div id="estado"></div>
+    </div>
+
+    <div id="msg" class="alert d-none"></div>
+
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="fw-bold mb-3">Conexion</h5>
+
+            <div class="btn-group mb-3" role="group" aria-label="Modo de conexion">
+              <input type="radio" class="btn-check" name="modo" id="modoRed" value="red" onchange="actualizarModo()">
+              <label class="btn btn-outline-primary" for="modoRed"><i class="bi bi-ethernet me-1"></i>Red / IP</label>
+
+              <input type="radio" class="btn-check" name="modo" id="modoShare" value="share" onchange="actualizarModo()" checked>
+              <label class="btn btn-outline-primary" for="modoShare"><i class="bi bi-usb-symbol me-1"></i>USB Windows</label>
+            </div>
+
+            <div id="redBox" class="d-none">
+              <label class="form-label">IP de la impresora</label>
+              <input id="host" class="form-control mb-2" placeholder="Ej: 192.168.1.50">
+              <label class="form-label">Puerto</label>
+              <input id="port" type="number" class="form-control" value="9100">
+            </div>
+
+            <div id="shareBox">
+              <label class="form-label">Nombre de impresora o recurso compartido</label>
+              <input id="share" class="form-control" value="JAL821">
+              <div class="form-text">Usa JAL821 si la impresora esta instalada en este PC. Tambien sirve \\localhost\JAL821 si la compartes en Windows.</div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-4">
+              <button class="btn btn-primary" onclick="guardarConfig()"><i class="bi bi-save me-1"></i>Guardar</button>
+              <button class="btn btn-outline-success" onclick="probar(false)"><i class="bi bi-receipt me-1"></i>Probar impresion</button>
+              <button class="btn btn-outline-warning" onclick="probar(true)"><i class="bi bi-safe2 me-1"></i>Probar cajon</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="fw-bold mb-3">Recomendado para empresa</h5>
+            <p class="mb-2">Para que no dependa de tu laptop, usa impresora por red/IP si la JAL821 trae puerto Ethernet.</p>
+            <p class="mb-2">Si solo es USB, se configura una vez en el computador de caja: driver instalado y destino <strong>JAL821</strong>.</p>
+            <p class="mb-0 text-muted small">La web no puede abrir un cajon USB directamente desde el navegador por seguridad; lo hace el servidor Node del panel usando ESC/POS.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  cargarConfig();
+});
+</script>
+</body>
+</html>

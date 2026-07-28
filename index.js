@@ -58,6 +58,14 @@ function dbAll(sql, params = []) {
   });
 }
 
+function dbRunAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) {
+      err ? reject(err) : resolve(this);
+    });
+  });
+}
+
 function formatoNumeroFactura(n) {
   return `FAC-${String(Number(n) || 1).padStart(6, '0')}`;
 }
@@ -80,42 +88,315 @@ function fechaHoraColombiaSQL(date = new Date()) {
 }
 
 function abrirCajonDinero() {
-  const pulse = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
-  const host = process.env.POS_PRINTER_HOST;
-  const port = Number(process.env.POS_PRINTER_PORT || 9100);
-  const share = process.env.POS_PRINTER_SHARE;
+  return enviarEscPos(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]), 'abriendo cajon');
+}
+
+async function obtenerConfigImpresora() {
+  const rows = await dbAll(
+    `SELECT clave, valor FROM config WHERE clave IN ('pos_printer_host','pos_printer_port','pos_printer_share')`
+  );
+  const saved = rows.reduce((acc, row) => {
+    acc[row.clave] = row.valor;
+    return acc;
+  }, {});
+
+  const host = (saved.pos_printer_host || process.env.POS_PRINTER_HOST || '').trim();
+  const port = Number(saved.pos_printer_port || process.env.POS_PRINTER_PORT || 9100);
+  const share = (saved.pos_printer_share || process.env.POS_PRINTER_SHARE || '').trim();
+
+  return {
+    configurada: Boolean(host || share),
+    host: host || null,
+    port: Number.isFinite(port) && port > 0 ? port : 9100,
+    share: share || null,
+    papel: '80mm',
+    modo: host ? 'red' : (share ? 'windows-share' : 'navegador')
+  };
+}
+
+async function guardarConfigImpresora({ host, port, share }) {
+  const cleanHost = String(host || '').trim();
+  const cleanShare = String(share || '').trim();
+  const cleanPort = String(Number(port || 9100) || 9100);
+
+  await dbRunAsync(
+    `INSERT INTO config (clave, valor) VALUES (?,?)
+     ON CONFLICT(clave) DO UPDATE SET valor=?`,
+    ['pos_printer_host', cleanHost, cleanHost]
+  );
+  await dbRunAsync(
+    `INSERT INTO config (clave, valor) VALUES (?,?)
+     ON CONFLICT(clave) DO UPDATE SET valor=?`,
+    ['pos_printer_port', cleanPort, cleanPort]
+  );
+  await dbRunAsync(
+    `INSERT INTO config (clave, valor) VALUES (?,?)
+     ON CONFLICT(clave) DO UPDATE SET valor=?`,
+    ['pos_printer_share', cleanShare, cleanShare]
+  );
+
+  return obtenerConfigImpresora();
+}
+
+async function enviarEscPos(buffer, accion = 'enviando datos POS') {
+  const config = await obtenerConfigImpresora();
+  const host = config.host;
+  const port = config.port;
+  const share = config.share;
 
   if (host) {
     return new Promise((resolve) => {
       const socket = net.createConnection({ host, port }, () => {
-        socket.write(pulse);
+        socket.write(buffer);
         socket.end();
       });
       socket.setTimeout(2500);
       socket.on('close', () => resolve({ ok: true, metodo: `tcp:${host}:${port}` }));
       socket.on('timeout', () => {
         socket.destroy();
-        resolve({ ok: false, mensaje: 'Tiempo agotado abriendo cajon por red' });
+        resolve({ ok: false, mensaje: `Tiempo agotado ${accion} por red` });
       });
       socket.on('error', (err) => resolve({ ok: false, mensaje: err.message }));
     });
   }
 
   if (share) {
-    const tmp = path.join(os.tmpdir(), `cajon-${Date.now()}.bin`);
-    fs.writeFileSync(tmp, pulse);
+    const tmp = path.join(os.tmpdir(), `pos-${Date.now()}.bin`);
+    fs.writeFileSync(tmp, buffer);
     return new Promise((resolve) => {
-      execFile('cmd.exe', ['/c', 'copy', '/B', tmp, share], { windowsHide: true }, (err) => {
+      const done = (err, metodo) => {
         fs.unlink(tmp, () => {});
-        resolve(err ? { ok: false, mensaje: err.message } : { ok: true, metodo: `share:${share}` });
-      });
+        resolve(err ? { ok: false, mensaje: err.message } : { ok: true, metodo });
+      };
+
+      if (share.startsWith('\\\\')) {
+        execFile('cmd.exe', ['/c', 'copy', '/B', tmp, share], { windowsHide: true }, (err) => {
+          done(err, `share:${share}`);
+        });
+        return;
+      }
+
+      enviarRawWindowsPrinter(share, tmp, (err) => done(err, `windows-printer:${share}`));
     });
   }
 
   return Promise.resolve({
     ok: false,
-    mensaje: 'Configura POS_PRINTER_HOST o POS_PRINTER_SHARE para abrir cajon por ESC/POS'
+    mensaje: 'Configura POS_PRINTER_HOST o POS_PRINTER_SHARE para usar la impresora POS'
   });
+}
+
+function enviarRawWindowsPrinter(printerName, filePath, callback) {
+  const ps = `
+param([string]$PrinterName, [string]$FilePath)
+Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+  }
+
+  [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+
+  [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+
+  [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
+
+  public static bool SendFileToPrinter(string printerName, string fileName) {
+    IntPtr hPrinter;
+    if (!OpenPrinter(printerName.Normalize(), out hPrinter, IntPtr.Zero)) return false;
+    DOCINFOA di = new DOCINFOA();
+    di.pDocName = "CEFORSEG POS";
+    di.pDataType = "RAW";
+    byte[] bytes = File.ReadAllBytes(fileName);
+    IntPtr unmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
+    Marshal.Copy(bytes, 0, unmanagedBytes, bytes.Length);
+    bool ok = false;
+    try {
+      if (StartDocPrinter(hPrinter, 1, di)) {
+        if (StartPagePrinter(hPrinter)) {
+          int written;
+          ok = WritePrinter(hPrinter, unmanagedBytes, bytes.Length, out written);
+          EndPagePrinter(hPrinter);
+        }
+        EndDocPrinter(hPrinter);
+      }
+    } finally {
+      Marshal.FreeCoTaskMem(unmanagedBytes);
+      ClosePrinter(hPrinter);
+    }
+    return ok;
+  }
+}
+"@
+if (-not [RawPrinterHelper]::SendFileToPrinter($PrinterName, $FilePath)) {
+  throw "No se pudo enviar RAW a la impresora '$PrinterName'"
+}
+`;
+
+  execFile(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps, '-PrinterName', printerName, '-FilePath', filePath],
+    { windowsHide: true, timeout: 10000 },
+    callback
+  );
+}
+
+function textoPlanoPOS(value) {
+  return String(value == null ? '' : value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E\r\n]/g, '');
+}
+
+function lineaPOS(left, right = '', width = 48) {
+  const l = textoPlanoPOS(left);
+  const r = textoPlanoPOS(right).slice(0, Math.max(1, width - 1));
+  const available = Math.max(1, width - r.length);
+  const trimmedLeft = l.length > available ? l.slice(0, available) : l;
+  return trimmedLeft + ' '.repeat(Math.max(0, width - trimmedLeft.length - r.length)) + r;
+}
+
+function envolverPOS(text, width = 48) {
+  const words = textoPlanoPOS(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    if (!line) {
+      line = word.slice(0, width);
+    } else if ((line + ' ' + word).length <= width) {
+      line += ' ' + word;
+    } else {
+      lines.push(line);
+      line = word.slice(0, width);
+    }
+  });
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
+}
+
+function centrarPOS(text, width = 48) {
+  const clean = textoPlanoPOS(text).slice(0, width);
+  const left = Math.max(0, Math.floor((width - clean.length) / 2));
+  return ' '.repeat(left) + clean;
+}
+
+function fechaFacturaPOS(fecha) {
+  const raw = fecha ? String(fecha) : '';
+  const date = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+    ? new Date(raw.replace(' ', 'T') + '-05:00')
+    : new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw || '-';
+  return date.toLocaleString('es-CO', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+function monedaPOS(value) {
+  return `$${Number(value || 0).toLocaleString('es-CO')} COP`;
+}
+
+function buildFacturaEscPos(factura, options = {}) {
+  const width = 48;
+  const lines = [];
+  const sep = '-'.repeat(width);
+  const add = (line = '') => lines.push(textoPlanoPOS(line));
+
+  add(centrarPOS('DENVER LTDA', width));
+  add(centrarPOS('Factura POS de ingreso', width));
+  add(centrarPOS(String(factura.estado || 'emitida').toUpperCase(), width));
+  add(sep);
+  add(centrarPOS(factura.numero || '-', width));
+  add(sep);
+  add(lineaPOS('Fecha', fechaFacturaPOS(factura.creado_en || factura.fecha), width));
+  add(lineaPOS('Cajero', factura.usuario_rol || factura.rol || '-', width));
+  add(lineaPOS('Metodo', factura.metodo_pago || '-', width));
+  add('');
+  add('Alumno:');
+  envolverPOS(factura.estudiante || '-', width).forEach(add);
+  add(lineaPOS('CC/NIT', factura.cedula || '-', width));
+  add(lineaPOS('Tel', factura.telefono || '-', width));
+  add('');
+  add(lineaPOS('Concepto', 'Abono / pago', width));
+  add('Curso:');
+  envolverPOS(factura.curso || '-', width).forEach(add);
+  if (factura.nota) {
+    add('Nota:');
+    envolverPOS(factura.nota, width).forEach(add);
+  }
+  add(sep);
+  add(lineaPOS('TOTAL', monedaPOS(factura.valor), width));
+  add(sep);
+  add(centrarPOS('Conserve este comprobante.', width));
+  add(centrarPOS('Consecutivo generado por el sistema.', width));
+  add(centrarPOS('Sin este numero no existe en caja.', width));
+  add('');
+  add('');
+  add('');
+
+  const chunks = [
+    Buffer.from([0x1b, 0x40]), // Inicializar impresora
+    Buffer.from([0x1b, 0x74, 0x02]), // Code page PC850 en impresoras ESC/POS compatibles
+    Buffer.from(lines.join('\n') + '\n', 'latin1')
+  ];
+  if (options.abrirCajon) chunks.push(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]));
+  chunks.push(Buffer.from([0x1d, 0x56, 0x41, 0x10])); // Corte parcial
+  return Buffer.concat(chunks);
+}
+
+function consultarFacturaPorId(id) {
+  return dbGet(`
+    SELECT
+      f.id,
+      f.numero,
+      f.tipo,
+      f.valor,
+      f.metodo_pago,
+      f.fecha,
+      f.creado_en,
+      f.nota,
+      f.estado,
+      f.abono_id,
+      e.id AS estudiante_id,
+      e.nombre AS estudiante,
+      e.cedula,
+      e.telefono,
+      c.nombre AS curso,
+      u.usuario AS usuario,
+      u.rol AS usuario_rol
+    FROM facturas f
+    JOIN estudiantes e ON e.id = f.estudiante_id
+    LEFT JOIN cursos c ON c.id = f.curso_id
+    LEFT JOIN usuarios u ON u.id = f.usuario_id
+    WHERE f.id=?
+  `, [id]);
 }
 
 function ymd(date) {
@@ -349,6 +630,7 @@ Buenos dias, le hablamos de CEFORSEG para revisar el saldo pendiente de su curso
 app.get('/', (_, res) => res.redirect('/login'));
 app.get('/login', (_, res) => res.sendFile(path.join(__dirname, 'public/login.html')));
 app.get('/dashboard', (_, res) => res.sendFile(path.join(__dirname, 'public/dashboard.html')));
+app.get('/impresora', (_, res) => res.sendFile(path.join(__dirname, 'public/impresora.html')));
 app.get('/estudiantes-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/estudiantes.html')));
 app.get('/estudiante-ficha', (_, res) => res.sendFile(path.join(__dirname, 'public/estudiante-ficha.html')));
 app.get('/matricular', (_, res) => res.sendFile(path.join(__dirname, 'public/matricular.html')));
@@ -2006,35 +2288,112 @@ app.get('/api/facturas/:id',
   permitirRoles('gerente','secretaria'),
   async (req, res) => {
     try {
-      const factura = await dbGet(`
-        SELECT
-          f.id,
-          f.numero,
-          f.tipo,
-          f.valor,
-          f.metodo_pago,
-          f.fecha,
-          f.creado_en,
-          f.nota,
-          f.estado,
-          f.abono_id,
-          e.id AS estudiante_id,
-          e.nombre AS estudiante,
-          e.cedula,
-          e.telefono,
-          c.nombre AS curso,
-          u.usuario AS usuario,
-          u.rol AS usuario_rol
-        FROM facturas f
-        JOIN estudiantes e ON e.id = f.estudiante_id
-        LEFT JOIN cursos c ON c.id = f.curso_id
-        LEFT JOIN usuarios u ON u.id = f.usuario_id
-        WHERE f.id=?
-      `, [req.params.id]);
+      const factura = await consultarFacturaPorId(req.params.id);
       if (!factura) return res.status(404).json({ mensaje: 'Factura no encontrada' });
       res.json(factura);
     } catch (err) {
       res.status(500).json({ mensaje: 'Error consultando factura' });
+    }
+  }
+);
+
+app.get('/api/impresora/config',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      res.json(await obtenerConfigImpresora());
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error leyendo configuracion de impresora' });
+    }
+  }
+);
+
+app.put('/api/impresora/config',
+  verificarToken,
+  permitirRoles('gerente'),
+  async (req, res) => {
+    try {
+      const host = String(req.body.host || '').trim();
+      const share = String(req.body.share || '').trim();
+      const port = Number(req.body.port || 9100);
+
+      if (host && share) {
+        return res.status(400).json({ mensaje: 'Configura IP o recurso compartido, no ambos.' });
+      }
+      if (!host && !share) {
+        return res.status(400).json({ mensaje: 'Debes configurar una IP de red o un recurso compartido de Windows.' });
+      }
+      if (!Number.isFinite(port) || port <= 0 || port > 65535) {
+        return res.status(400).json({ mensaje: 'Puerto invalido. Para impresoras POS normalmente es 9100.' });
+      }
+
+      const config = await guardarConfigImpresora({ host, port, share });
+      registrarAuditoria(req, 'configurar_impresora_pos', 'config', null, {
+        modo: config.modo,
+        host: config.host,
+        port: config.port,
+        share: config.share
+      });
+      res.json(config);
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error guardando configuracion de impresora' });
+    }
+  }
+);
+
+app.post('/api/impresora/prueba',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const abrirCajon = req.body && req.body.abrir_cajon === true;
+      const lines = [
+        centrarPOS('DENVER LTDA'),
+        centrarPOS('PRUEBA IMPRESORA POS 80MM'),
+        '-'.repeat(48),
+        lineaPOS('Fecha', fechaFacturaPOS(fechaHoraColombiaSQL())),
+        lineaPOS('Usuario', req.usuario && req.usuario.usuario ? req.usuario.usuario : '-'),
+        '',
+        'Si este texto sale completo, la JAL821 esta lista.',
+        '',
+        ''
+      ];
+      const chunks = [
+        Buffer.from([0x1b, 0x40]),
+        Buffer.from([0x1b, 0x74, 0x02]),
+        Buffer.from(lines.join('\n') + '\n', 'latin1')
+      ];
+      if (abrirCajon) chunks.push(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]));
+      chunks.push(Buffer.from([0x1d, 0x56, 0x41, 0x10]));
+      const resultado = await enviarEscPos(Buffer.concat(chunks), 'imprimiendo prueba');
+      registrarAuditoria(req, 'prueba_impresora_pos', 'caja', null, { resultado, abrir_cajon: abrirCajon });
+      res.json(resultado);
+    } catch (err) {
+      res.status(500).json({ ok: false, mensaje: 'Error imprimiendo prueba POS' });
+    }
+  }
+);
+
+app.post('/api/facturas/:id/imprimir-pos',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const factura = await consultarFacturaPorId(req.params.id);
+      if (!factura) return res.status(404).json({ ok: false, mensaje: 'Factura no encontrada' });
+
+      const abrirCajon = factura.metodo_pago === 'efectivo' && !(req.body && req.body.abrir_cajon === false);
+      const ticket = buildFacturaEscPos(factura, { abrirCajon });
+      const resultado = await enviarEscPos(ticket, 'imprimiendo factura POS');
+      registrarAuditoria(req, 'imprimir_factura_pos', 'facturas', req.params.id, {
+        numero_factura: factura.numero,
+        abrir_cajon: abrirCajon,
+        resultado
+      });
+      res.json(resultado);
+    } catch (err) {
+      res.status(500).json({ ok: false, mensaje: 'Error imprimiendo factura POS' });
     }
   }
 );
