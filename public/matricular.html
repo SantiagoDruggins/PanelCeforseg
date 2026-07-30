@@ -242,6 +242,7 @@ function mostrarResultadoMatricula(estudianteId, facturaId){
 
 async function imprimirFacturaDirecta(facturaId, abrirVistaSiFalla){
   if(!facturaId) return false;
+  let mensajeServidor = '';
   try{
     const res = await fetch('/api/facturas/' + facturaId + '/imprimir-pos', {
       method:'POST',
@@ -253,13 +254,18 @@ async function imprimirFacturaDirecta(facturaId, abrirVistaSiFalla){
     });
     const data = await res.json();
     if(data.ok) return true;
+    mensajeServidor = data.mensaje || '';
+    const localOk = await imprimirFacturaAgenteLocal(facturaId);
+    if(localOk) return true;
     if(abrirVistaSiFalla){
-      alert((data.mensaje || 'No se pudo imprimir directo') + '. Se abrira la factura para imprimir manualmente.');
+      alert((mensajeServidor || 'No se pudo imprimir directo') + '. Se abrira la factura para imprimir manualmente.');
       window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
     }else{
-      alert(data.mensaje || 'No se pudo imprimir la factura automaticamente.');
+      alert(mensajeServidor || 'No se pudo imprimir la factura automaticamente.');
     }
   }catch(err){
+    const localOk = await imprimirFacturaAgenteLocal(facturaId);
+    if(localOk) return true;
     if(abrirVistaSiFalla){
       alert('No se pudo conectar con la impresora directa. Se abrira la factura para imprimir manualmente.');
       window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
@@ -268,6 +274,30 @@ async function imprimirFacturaDirecta(facturaId, abrirVistaSiFalla){
     }
   }
   return false;
+}
+
+async function imprimirFacturaAgenteLocal(facturaId){
+  try{
+    const esc = await fetch('/api/facturas/' + facturaId + '/escpos', {
+      headers:{ 'Authorization':'Bearer ' + token }
+    });
+    const payload = await esc.json();
+    if(!payload.ok || !payload.data) return false;
+
+    const local = await fetch('http://127.0.0.1:17777/print', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        data: payload.data,
+        host: payload.host || '192.168.1.5',
+        port: payload.port || 9100
+      })
+    });
+    const result = await local.json();
+    return Boolean(result.ok);
+  }catch(err){
+    return false;
+  }
 }
 
 function registrarSubmit(){

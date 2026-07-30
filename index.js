@@ -2398,6 +2398,34 @@ app.post('/api/facturas/:id/imprimir-pos',
   }
 );
 
+app.get('/api/facturas/:id/escpos',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const factura = await consultarFacturaPorId(req.params.id);
+      if (!factura) return res.status(404).json({ ok: false, mensaje: 'Factura no encontrada' });
+
+      const abrirCajon = factura.metodo_pago === 'efectivo' && req.query.abrir_cajon !== '0';
+      const ticket = buildFacturaEscPos(factura, { abrirCajon });
+      const config = await obtenerConfigImpresora();
+      registrarAuditoria(req, 'generar_factura_escpos', 'facturas', req.params.id, {
+        numero_factura: factura.numero,
+        abrir_cajon: abrirCajon,
+        destino: config.host ? `${config.host}:${config.port}` : config.share || 'local'
+      });
+      res.json({
+        ok: true,
+        data: ticket.toString('base64'),
+        host: config.host,
+        port: config.port || 9100
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, mensaje: 'Error generando ticket POS' });
+    }
+  }
+);
+
 app.post('/api/facturas/:id/abrir-cajon',
   verificarToken,
   permitirRoles('gerente','secretaria'),
