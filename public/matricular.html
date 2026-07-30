@@ -221,8 +221,8 @@ function mostrarResultadoMatricula(estudianteId, facturaId){
             Imprimir acta de matricula
           </button>
           ${facturaId ? `
-          <button class="btn btn-success btn-lg" onclick="window.open('/factura-pos.html?id=${facturaId}', '_blank', 'width=420,height=720')">
-            Imprimir factura POS
+          <button class="btn btn-success btn-lg" onclick="imprimirFacturaDirecta(${facturaId}, true)">
+            Reimprimir factura POS
           </button>
           ` : ''}
           <a class="btn btn-outline-secondary btn-lg" href="/estudiante-ficha?id=${estudianteId}">
@@ -239,6 +239,37 @@ function mostrarResultadoMatricula(estudianteId, facturaId){
     </div>
   `;
 }
+
+async function imprimirFacturaDirecta(facturaId, abrirVistaSiFalla){
+  if(!facturaId) return false;
+  try{
+    const res = await fetch('/api/facturas/' + facturaId + '/imprimir-pos', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer ' + token
+      },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if(data.ok) return true;
+    if(abrirVistaSiFalla){
+      alert((data.mensaje || 'No se pudo imprimir directo') + '. Se abrira la factura para imprimir manualmente.');
+      window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
+    }else{
+      alert(data.mensaje || 'No se pudo imprimir la factura automaticamente.');
+    }
+  }catch(err){
+    if(abrirVistaSiFalla){
+      alert('No se pudo conectar con la impresora directa. Se abrira la factura para imprimir manualmente.');
+      window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
+    }else{
+      alert('No se pudo conectar con la impresora directa.');
+    }
+  }
+  return false;
+}
+
 function registrarSubmit(){
   document.getElementById('formMatricula').addEventListener('submit', async e=>{
     e.preventDefault();
@@ -297,6 +328,7 @@ function registrarSubmit(){
         alert(pagoData.mensaje || 'Estudiante creado, pero no se pudo facturar el pago inicial');
       }else if(pagoData.factura && pagoData.factura.id){
         facturaId = pagoData.factura.id;
+        await imprimirFacturaDirecta(facturaId, false);
       }
     }
     if (data.id) {

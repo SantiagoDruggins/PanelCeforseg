@@ -382,17 +382,46 @@ async function registrarAbono(){
   const fa = document.getElementById('fecha_abono');
   if(fa) fa.value = new Date().toISOString().slice(0, 10);
   if(data.factura && data.factura.id){
-    window.open('/factura-pos.html?id=' + data.factura.id, '_blank', 'width=420,height=720');
+    await imprimirFacturaDirecta(data.factura.id, true);
   }
   cargarFicha();
 }
 
-function imprimirFactura(facturaId){
+async function imprimirFacturaDirecta(facturaId, abrirVistaSiFalla){
   if(!facturaId){
     alert('Este abono aun no tiene factura POS vinculada.');
-    return;
+    return false;
   }
-  window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
+  try{
+    const res = await fetch('/api/facturas/' + facturaId + '/imprimir-pos', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer ' + token
+      },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if(data.ok) return true;
+    if(abrirVistaSiFalla){
+      alert((data.mensaje || 'No se pudo imprimir directo') + '. Se abrira la factura para imprimir manualmente.');
+      window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
+    }else{
+      alert(data.mensaje || 'No se pudo imprimir directo.');
+    }
+  }catch(err){
+    if(abrirVistaSiFalla){
+      alert('No se pudo conectar con la impresora directa. Se abrira la factura para imprimir manualmente.');
+      window.open('/factura-pos.html?id=' + facturaId, '_blank', 'width=420,height=720');
+    }else{
+      alert('No se pudo conectar con la impresora directa.');
+    }
+  }
+  return false;
+}
+
+function imprimirFactura(facturaId){
+  imprimirFacturaDirecta(facturaId, true);
 }
 
 function editarAbonoDesdeFila(btn){
