@@ -6,6 +6,7 @@ const net = require('net');
 const os = require('os');
 const { execFile } = require('child_process');
 const multer = require('multer');
+const jpeg = require('jpeg-js');
 
 function cargarEnvLocal() {
   const envPath = path.join(__dirname, '.env');
@@ -323,6 +324,65 @@ function monedaPOS(value) {
   return `$${Number(value || 0).toLocaleString('es-CO')} COP`;
 }
 
+let logoEscPosCache = null;
+
+function pixelLogoNegro(r, g, b, a) {
+  if (a !== undefined && a < 128) return false;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+  const saturation = max === 0 ? 0 : (max - min) / max;
+
+  // El logo Denver tiene fondo oscuro y arte dorado. Para termica B/N:
+  // fondo oscuro -> blanco, dorado/saturado -> negro.
+  return saturation > 0.18 && luma > 42;
+}
+
+function buildLogoEscPos() {
+  if (logoEscPosCache) return logoEscPosCache;
+
+  try {
+    const logoPath = path.join(__dirname, 'public', 'assets', 'logo-denver.png');
+    if (!fs.existsSync(logoPath)) return Buffer.alloc(0);
+
+    const decoded = jpeg.decode(fs.readFileSync(logoPath), { useTArray: true });
+    const maxWidth = 160;
+    const maxHeight = 112;
+    const scale = Math.min(maxWidth / decoded.width, maxHeight / decoded.height, 1);
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+    const widthBytes = Math.ceil(width / 8);
+    const data = Buffer.alloc(widthBytes * height, 0);
+
+    for (let y = 0; y < height; y += 1) {
+      const srcY = Math.min(decoded.height - 1, Math.floor(y / scale));
+      for (let x = 0; x < width; x += 1) {
+        const srcX = Math.min(decoded.width - 1, Math.floor(x / scale));
+        const idx = (srcY * decoded.width + srcX) * 4;
+        const r = decoded.data[idx];
+        const g = decoded.data[idx + 1];
+        const b = decoded.data[idx + 2];
+        const a = decoded.data[idx + 3];
+        if (pixelLogoNegro(r, g, b, a)) {
+          data[y * widthBytes + (x >> 3)] |= 0x80 >> (x & 7);
+        }
+      }
+    }
+
+    logoEscPosCache = Buffer.concat([
+      Buffer.from([0x1b, 0x61, 0x01]), // centrar
+      Buffer.from([0x1d, 0x76, 0x30, 0x00, widthBytes & 0xff, (widthBytes >> 8) & 0xff, height & 0xff, (height >> 8) & 0xff]),
+      data,
+      Buffer.from([0x1b, 0x61, 0x00, 0x0a])
+    ]);
+    return logoEscPosCache;
+  } catch (err) {
+    console.log('Logo POS:', err.message);
+    logoEscPosCache = Buffer.alloc(0);
+    return logoEscPosCache;
+  }
+}
+
 function buildFacturaEscPos(factura, options = {}) {
   const width = 48;
   const lines = [];
@@ -364,6 +424,7 @@ function buildFacturaEscPos(factura, options = {}) {
   const chunks = [
     Buffer.from([0x1b, 0x40]), // Inicializar impresora
     Buffer.from([0x1b, 0x74, 0x02]), // Code page PC850 en impresoras ESC/POS compatibles
+    buildLogoEscPos(),
     Buffer.from(lines.join('\n') + '\n', 'latin1')
   ];
   if (options.abrirCajon) chunks.push(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]));
@@ -2362,6 +2423,7 @@ app.post('/api/impresora/prueba',
       const chunks = [
         Buffer.from([0x1b, 0x40]),
         Buffer.from([0x1b, 0x74, 0x02]),
+        buildLogoEscPos(),
         Buffer.from(lines.join('\n') + '\n', 'latin1')
       ];
       if (abrirCajon) chunks.push(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]));
