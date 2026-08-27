@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>PPR antiguos - DENVER LTDA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+<style>
+.resultados-busqueda{
+  max-height:260px;
+  overflow:auto;
+}
+.student-pill{
+  cursor:pointer;
+}
+.student-pill:hover{
+  background:#eef6ff;
+}
+.factura-box{
+  border:1px solid #badbcc;
+  background:#f0fff4;
+  border-radius:8px;
+  padding:14px;
+}
+</style>
+</head>
+
+<body>
+
+<script>
+if(!localStorage.getItem('token')){
+  location.href='/login';
+}
+</script>
+
+<div id="app"></div>
+
+<script src="/permisos.js"></script>
+<script>
+if (bloquearModuloAliado('PPR antiguos')) throw new Error('Acceso aliado bloqueado');
+
+const token = localStorage.getItem('token');
+let cursos = [];
+let estudiantes = [];
+let estudianteActivo = null;
+let ultimaFacturaId = null;
+
+fetch('/layout.html')
+  .then(r => r.text())
+  .then(html => {
+    document.getElementById('app').innerHTML = html;
+    aplicarPermisosPanel();
+    render();
+    cargarCursos();
+    cargarEstudiantes();
+  });
+
+function headersJson(){
+  return {
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json'
+  };
+}
+
+function hoy(){
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatoCOP(n){
+  return '$' + Number(n || 0).toLocaleString('es-CO') + ' COP';
+}
+
+function render(){
+  document.querySelector('.content').innerHTML = `
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-folder-plus me-2"></i>PPR antiguos</h3>
+        <p class="text-muted mb-0">Carga historica de alumnos y abonos. Aqui se genera factura y consecutivo, pero no se imprime automaticamente.</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="/estudiantes-panel"><i class="bi bi-people me-1"></i> Ver estudiantes</a>
+    </div>
+
+    <div id="msg"></div>
+
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <h5 class="fw-bold mb-3">Buscar alumno existente</h5>
+            <input class="form-control mb-2" id="buscarAlumno" placeholder="Nombre o cedula" oninput="filtrarEstudiantes()">
+            <div id="resultadosBusqueda" class="resultados-busqueda border rounded bg-white"></div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="fw-bold mb-3">Crear alumno PPR antiguo</h5>
+            <form id="formPpr" onsubmit="crearEstudiantePpr(event)">
+              <div class="row g-2">
+                <div class="col-12">
+                  <input class="form-control" name="nombre" placeholder="Nombre completo" required>
+                </div>
+                <div class="col-md-6">
+                  <input class="form-control" name="cedula" placeholder="Cedula" required>
+                </div>
+                <div class="col-md-6">
+                  <input class="form-control" name="telefono" placeholder="Telefono">
+                </div>
+                <div class="col-md-6">
+                  <input class="form-control" name="email" type="email" placeholder="Correo">
+                </div>
+                <div class="col-md-6">
+                  <input class="form-control" name="ciudad" placeholder="Ciudad">
+                </div>
+                <div class="col-md-6">
+                  <input class="form-control" name="fecha_matricula" type="date" value="${hoy()}" title="Fecha de registro historico">
+                </div>
+                <div class="col-12">
+                  <input class="form-control" name="direccion" placeholder="Direccion">
+                </div>
+                <div class="col-12">
+                  <input class="form-control" name="contacto_emergencia" placeholder="Contacto de emergencia">
+                </div>
+              </div>
+
+              <hr>
+              <h6 class="mb-2">Cursos asociados</h6>
+              <div id="listaCursosPpr" class="mb-3"></div>
+              <button class="btn btn-primary w-100" type="submit"><i class="bi bi-save me-1"></i> Crear y seleccionar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div id="panelAbono">
+              <div class="text-center text-muted py-5">
+                <i class="bi bi-person-check fs-1 d-block mb-2"></i>
+                Busca o crea un alumno PPR antiguo para cargarle abonos historicos.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function cargarCursos(){
+  const res = await fetch('/api/cursos', { headers:{ Authorization:'Bearer ' + token } });
+  cursos = await res.json();
+  pintarCursosCrear();
+}
+
+async function cargarEstudiantes(){
+  const res = await fetch('/api/estudiantes', { headers:{ Authorization:'Bearer ' + token } });
+  estudiantes = await res.json();
+  filtrarEstudiantes();
+}
+
+function pintarCursosCrear(){
+  const box = document.getElementById('listaCursosPpr');
+  if(!box) return;
+  box.innerHTML = cursos.map(c => `
+    <label class="d-flex align-items-center gap-2 mb-1">
+      <input class="form-check-input" type="checkbox" name="curso_ids" value="${c.id}">
+      <span>${c.nombre} - ${formatoCOP(c.precio)}</span>
+    </label>
+  `).join('') || '<div class="text-muted small">No hay cursos activos.</div>';
+}
+
+function filtrarEstudiantes(){
+  const box = document.getElementById('resultadosBusqueda');
+  if(!box) return;
+  const q = (document.getElementById('buscarAlumno')?.value || '').trim().toLowerCase();
+  const lista = estudiantes
+    .filter(e => !q || String(e.nombre || '').toLowerCase().includes(q) || String(e.cedula || '').toLowerCase().includes(q))
+    .slice(0, 25);
+
+  box.innerHTML = lista.map(e => `
+    <div class="student-pill p-2 border-bottom" onclick="seleccionarEstudiante(${e.id})">
+      <div class="fw-semibold">${e.nombre || 'Sin nombre'}</div>
+      <small class="text-muted">CC/NIT ${e.cedula || '-'} | Saldo ${formatoCOP(e.saldo)}</small>
+    </div>
+  `).join('') || '<div class="p-3 text-muted small">No hay resultados.</div>';
+}
+
+async function crearEstudiantePpr(ev){
+  ev.preventDefault();
+  const form = ev.target;
+  const fd = new FormData(form);
+  const seleccionados = [...form.querySelectorAll('input[name="curso_ids"]:checked')].map(i => i.value);
+  fd.delete('curso_ids');
+  seleccionados.forEach(id => fd.append('curso_ids[]', id));
+
+  try{
+    const res = await fetch('/api/estudiantes', {
+      method:'POST',
+      headers:{ Authorization:'Bearer ' + token },
+      body: fd
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.mensaje || 'No se pudo crear el alumno');
+
+    form.reset();
+    await cargarEstudiantes();
+    mostrarMsg('Alumno PPR creado. Ahora puedes cargar el abono historico sin impresion automatica.', 'success');
+    await seleccionarEstudiante(data.id);
+  }catch(err){
+    mostrarMsg(err.message, 'danger');
+  }
+}
+
+async function seleccionarEstudiante(id){
+  ultimaFacturaId = null;
+  const res = await fetch('/api/estudiantes/' + id, { headers:{ Authorization:'Bearer ' + token } });
+  estudianteActivo = await res.json();
+  pintarPanelAbono();
+}
+
+function pintarPanelAbono(){
+  const box = document.getElementById('panelAbono');
+  const opciones = (estudianteActivo.cursos || []).map(c => `
+    <option value="${c.curso_id}">${c.nombre} - saldo ${formatoCOP(c.saldo)}</option>
+  `).join('');
+
+  box.innerHTML = `
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h5 class="fw-bold mb-1">${estudianteActivo.nombre}</h5>
+        <div class="text-muted">CC/NIT ${estudianteActivo.cedula || '-'} | Tel ${estudianteActivo.telefono || '-'}</div>
+      </div>
+      <a class="btn btn-outline-primary btn-sm" href="/estudiante-ficha?id=${estudianteActivo.id}">
+        <i class="bi bi-person-vcard me-1"></i> Abrir ficha
+      </a>
+    </div>
+
+    <form id="formAbonoHistorico" onsubmit="registrarAbonoHistorico(event)">
+      <div class="alert alert-info">
+        Esta pantalla es solo para PPR antiguos: guarda el ingreso y genera factura, pero no imprime ni abre caja automaticamente.
+      </div>
+      <div class="row g-2">
+        <div class="col-md-6">
+          <label class="form-label">Curso</label>
+          <select class="form-select" name="curso_id" required>
+            <option value="">Seleccione curso</option>
+            ${opciones}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Fecha real del pago</label>
+          <input class="form-control" name="fecha" type="date" value="${hoy()}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Valor abonado</label>
+          <input class="form-control" name="valor" type="number" min="1" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Metodo</label>
+          <select class="form-select" name="metodo_pago">
+            <option value="efectivo">Efectivo</option>
+            <option value="nequi">Nequi</option>
+            <option value="Daviplata">Daviplata</option>
+            <option value="Bancolombia">Transferencia - Bancolombia</option>
+            <option value="Otro banco">Transferencia - Otro banco</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Nota / soporte fisico</label>
+          <input class="form-control" name="nota" value="PPR antiguo - pago cargado desde factura fisica" placeholder="Numero de factura fisica, recibo o detalle">
+        </div>
+      </div>
+      <button class="btn btn-success mt-3" type="submit">
+        <i class="bi bi-check2-circle me-1"></i> Guardar abono historico sin imprimir
+      </button>
+    </form>
+
+    <div id="resultadoFactura" class="mt-3"></div>
+  `;
+
+  if(!(estudianteActivo.cursos || []).length){
+    box.querySelector('button[type="submit"]').disabled = true;
+    mostrarMsg('Este alumno no tiene cursos asociados. Agrega un curso desde la ficha antes de cargar abonos.', 'warning');
+  }
+}
+
+async function registrarAbonoHistorico(ev){
+  ev.preventDefault();
+  const form = ev.target;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.estudiante_id = estudianteActivo.id;
+
+  try{
+    const res = await fetch('/api/abonos', {
+      method:'POST',
+      headers: headersJson(),
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.mensaje || 'No se pudo guardar el abono');
+
+    ultimaFacturaId = data.factura?.id || null;
+    const numeroFactura = data.factura?.numero || '-';
+    const facturaId = ultimaFacturaId;
+    const estudianteId = estudianteActivo.id;
+    await cargarEstudiantes();
+    await seleccionarEstudiante(estudianteId);
+    document.getElementById('resultadoFactura').innerHTML = `
+      <div class="factura-box">
+        <div class="fw-bold text-success mb-1">Abono historico guardado sin impresion automatica.</div>
+        <div>Factura generada: <strong>${numeroFactura}</strong></div>
+        <div class="small text-muted mb-2">El consecutivo queda en el sistema. Solo imprime si necesitas copia.</div>
+        ${facturaId ? `
+          <button class="btn btn-outline-success btn-sm" type="button" onclick="imprimirFacturaOpcional(${facturaId})">
+            <i class="bi bi-printer me-1"></i> Imprimir factura POS opcional
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }catch(err){
+    mostrarMsg(err.message, 'danger');
+  }
+}
+
+async function imprimirFacturaOpcional(facturaId){
+  try{
+    const res = await fetch('/api/facturas/' + facturaId + '/imprimir-pos', {
+      method:'POST',
+      headers: headersJson()
+    });
+    if(res.ok){
+      mostrarMsg('Factura enviada a la impresora POS.', 'success');
+      return;
+    }
+  }catch(_err){}
+
+  try{
+    const esc = await fetch('/api/facturas/' + facturaId + '/escpos', {
+      headers:{ Authorization:'Bearer ' + token }
+    });
+    const data = await esc.json();
+    if(!esc.ok) throw new Error(data.mensaje || 'No se pudo preparar la factura');
+    const local = await fetch('http://127.0.0.1:17777/print', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ data: data.base64, openCash: false })
+    });
+    if(!local.ok) throw new Error('Agente local no disponible');
+    mostrarMsg('Factura enviada al agente POS local.', 'success');
+  }catch(err){
+    window.open('/factura-pos.html?id=' + facturaId, '_blank');
+    mostrarMsg('No se pudo imprimir directo. Abri la factura para imprimir manualmente.', 'warning');
+  }
+}
+
+function mostrarMsg(texto, tipo){
+  const msg = document.getElementById('msg');
+  if(!msg) return;
+  msg.innerHTML = `<div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+    ${texto}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+  </div>`;
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

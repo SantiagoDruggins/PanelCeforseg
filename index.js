@@ -695,6 +695,7 @@ app.get('/impresora', (_, res) => res.sendFile(path.join(__dirname, 'public/impr
 app.get('/estudiantes-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/estudiantes.html')));
 app.get('/estudiante-ficha', (_, res) => res.sendFile(path.join(__dirname, 'public/estudiante-ficha.html')));
 app.get('/matricular', (_, res) => res.sendFile(path.join(__dirname, 'public/matricular.html')));
+app.get('/ppr-antiguos', (_, res) => res.sendFile(path.join(__dirname, 'public/ppr-antiguos.html')));
 app.get('/cursos-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/cursos.html')));
 app.get('/usuarios-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/usuarios.html')));
 app.get('/certificados-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/certificados.html')));
