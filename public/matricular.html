@@ -253,7 +253,7 @@ async function capturarHuellaMatricula(){
     });
     const data = await res.json();
     if(!res.ok || !data.ok || !data.template){
-      throw new Error(data.mensaje || 'No se pudo capturar la huella');
+      throw new Error(fingerprintErrorMessage(data, 'No se pudo capturar la huella'));
     }
 
     const buscar = await fetch('/api/huellas/buscar', {
@@ -281,7 +281,7 @@ async function capturarHuellaMatricula(){
     huellaCapturada = null;
     document.getElementById('huella_template').value = '';
     estado.className = 'alert alert-danger text-start py-2 small';
-    estado.innerHTML = err.message + '. Revisa que el agente del huellero este encendido.';
+    estado.textContent = `${fingerprintErrorMessage(err)} Revisa que el agente del huellero esté encendido.`;
   }
 }
 

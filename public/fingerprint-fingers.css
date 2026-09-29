@@ -3,6 +3,17 @@
   border-radius: 10px;
   background: #f8fbff;
   padding: 12px;
+  min-width: 0;
+}
+
+#estadoHuella,
+#estadoHuellaFicha,
+#estadoAgente,
+#resultado,
+#msg {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .fingerprint-picker-title {

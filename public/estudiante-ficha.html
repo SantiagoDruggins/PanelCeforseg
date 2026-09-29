@@ -324,7 +324,7 @@ async function registrarHuellaFicha(){
       body: JSON.stringify({ purpose:'enroll', estudiante_id:id, dedo })
     });
     const data = await cap.json();
-    if(!cap.ok || !data.ok || !data.template) throw new Error(data.mensaje || 'No se pudo capturar la huella');
+    if(!cap.ok || !data.ok || !data.template) throw new Error(fingerprintErrorMessage(data, 'No se pudo capturar la huella'));
 
     const res = await fetch('/api/huellas', {
       method:'POST',
@@ -345,7 +345,8 @@ async function registrarHuellaFicha(){
     alert('Huella registrada correctamente');
     cargarFicha();
   }catch(err){
-    estado.innerHTML = '<div class="alert alert-danger">' + err.message + '. Revisa que el agente del huellero este encendido.</div>';
+    estado.innerHTML = '<div class="alert alert-danger"></div>';
+    estado.firstElementChild.textContent = `${fingerprintErrorMessage(err)} Revisa que el agente del huellero esté encendido.`;
   }
 }
 

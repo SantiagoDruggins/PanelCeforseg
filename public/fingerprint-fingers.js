@@ -30,11 +30,28 @@
     }[char]));
   }
 
+  window.fingerprintEscapeHtml = escapeHtml;
+
   window.fingerprintFingerLabel = function(value){
     const finger = allFingers.find(item => item.value === value);
     if(!finger) return 'dedo seleccionado';
     const hand = value.endsWith('_derecho') ? 'derecho' : 'izquierdo';
     return `${finger.label} ${hand}`;
+  };
+
+  window.fingerprintErrorMessage = function(error, fallback){
+    const raw = error instanceof Error
+      ? error.message
+      : (error && (error.mensaje || error.message)) || '';
+    const message = String(raw || fallback || 'No se pudo capturar la huella');
+
+    if(message.includes('CAPTURE_TIMEOUT')) {
+      return 'No se detectó el dedo. Colóquelo centrado sobre el lector y manténgalo quieto.';
+    }
+    if(/PSObject|PSReference|Byte\[\]|SDK_LOAD_FAILED|Int32&|SDK_ERROR/.test(message)) {
+      return 'El agente del huellero necesita actualizarse en este computador. Ejecute git pull y vuelva a instalar el agente.';
+    }
+    return message.length > 240 ? `${message.slice(0, 237)}...` : message;
   };
 
   window.fingerprintPickerMarkup = function(pickerId, inputId, selected){
