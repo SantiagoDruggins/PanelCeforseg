@@ -7,6 +7,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="/fingerprint-fingers.css" rel="stylesheet">
 
 <style>
 .camera-box{
@@ -40,6 +41,7 @@ if(!localStorage.getItem('token')){
 <div id="app"></div>
 
 <script src="/permisos.js"></script>
+<script src="/fingerprint-fingers.js"></script>
 <script>
 if (bloquearModuloAliado('Matricular')) throw new Error('Acceso aliado bloqueado');
 const token = localStorage.getItem('token');
@@ -145,6 +147,8 @@ fetch('/layout.html')
                 <div id="estadoHuella" class="alert alert-warning text-start py-2 small">
                   Pendiente por capturar con ZK9500.
                 </div>
+                ${fingerprintPickerMarkup('dedoPickerMatricula', 'huella_dedo', 'indice_derecho')}
+                <div class="mb-2"></div>
                 <button type="button" class="btn btn-outline-primary w-100 mb-2" onclick="capturarHuellaMatricula()">
                   <i class="bi bi-fingerprint me-1"></i> Capturar huella
                 </button>
@@ -171,6 +175,13 @@ fetch('/layout.html')
 
     iniciarCamara();
     cargarCursos();
+    initFingerprintPicker('dedoPickerMatricula', 'huella_dedo', () => {
+      huellaCapturada = null;
+      document.getElementById('huella_template').value = '';
+      const estado = document.getElementById('estadoHuella');
+      estado.className = 'alert alert-warning text-start py-2 small';
+      estado.textContent = 'Seleccione el dedo y vuelva a capturarlo.';
+    });
     registrarSubmit();
   });
 
@@ -230,13 +241,15 @@ async function cargarCursos(){
 async function capturarHuellaMatricula(){
   const estado = document.getElementById('estadoHuella');
   const msg = document.getElementById('msgHuella');
+  const dedo = document.getElementById('huella_dedo').value || 'indice_derecho';
+  const dedoLabel = fingerprintFingerLabel(dedo);
   estado.className = 'alert alert-info text-start py-2 small';
-  estado.innerHTML = 'Capturando huella... mantenga el dedo quieto sobre el lector.';
+  estado.innerHTML = `Capturando ${dedoLabel.toLowerCase()}... mantenga el dedo quieto sobre el lector.`;
   try{
     const res = await fetch(FINGERPRINT_AGENT_URL + '/capture', {
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ purpose:'enroll', dedo:'indice_derecho' })
+      body: JSON.stringify({ purpose:'enroll', dedo })
     });
     const data = await res.json();
     if(!res.ok || !data.ok || !data.template){
@@ -257,13 +270,13 @@ async function capturarHuellaMatricula(){
       throw new Error('Esta huella ya existe para ' + (e.nombre || 'otro alumno') + ' (' + (e.cedula || 'sin cedula') + ')');
     }
 
-    huellaCapturada = data;
+    huellaCapturada = { ...data, dedo };
     document.getElementById('huella_template').value = data.template;
     document.getElementById('huella_calidad').value = data.quality || data.calidad || '';
     document.getElementById('huella_dispositivo').value = data.device || data.dispositivo || 'ZK9500';
     msg.classList.add('d-none');
     estado.className = 'alert alert-success text-start py-2 small';
-    estado.innerHTML = (data.mensaje || 'Huella capturada correctamente') + '. Calidad: ' + (data.quality || data.calidad || 'OK');
+    estado.innerHTML = `${data.mensaje || 'Huella capturada correctamente'}: ${dedoLabel}. Calidad: ${data.quality || data.calidad || 'OK'}`;
   }catch(err){
     huellaCapturada = null;
     document.getElementById('huella_template').value = '';
@@ -416,7 +429,7 @@ function registrarSubmit(){
         },
         body: JSON.stringify({
           estudiante_id: data.id,
-          dedo: 'indice_derecho',
+          dedo: huellaCapturada.dedo || document.getElementById('huella_dedo').value || 'indice_derecho',
           template: huellaCapturada.template,
           calidad: huellaCapturada.quality || huellaCapturada.calidad || null,
           dispositivo: huellaCapturada.device || huellaCapturada.dispositivo || 'ZK9500'

@@ -14,6 +14,16 @@ $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Runner = Join-Path $PSScriptRoot "run-fingerprint-agent.ps1"
 $Node = Get-Command node -ErrorAction SilentlyContinue
 
+$ResolvedSdkRoot = $SdkRoot
+if ($SdkRoot) {
+  if (-not (Test-Path -LiteralPath $SdkRoot)) {
+    throw "No se encontro la carpeta del SDK: $SdkRoot"
+  }
+  $ResolvedSdkRoot = (Resolve-Path -LiteralPath $SdkRoot).Path
+  [Environment]::SetEnvironmentVariable('FINGERPRINT_SDK_ROOT', $ResolvedSdkRoot, 'User')
+  $env:FINGERPRINT_SDK_ROOT = $ResolvedSdkRoot
+}
+
 if (-not $Node) {
   throw "Node.js no esta instalado o no esta en PATH. Instala Node.js antes de instalar el agente del huellero."
 }
@@ -25,7 +35,7 @@ $Args = @(
   "-File", "`"$Runner`"",
   "-AgentPort", $AgentPort,
   "-DeviceName", "`"$DeviceName`"",
-  "-SdkRoot", "`"$SdkRoot`"",
+  "-SdkRoot", "`"$ResolvedSdkRoot`"",
   "-CaptureCommand", "`"$CaptureCommand`"",
   "-CaptureArgs", "`"$CaptureArgs`"",
   "-MatchCommand", "`"$MatchCommand`"",

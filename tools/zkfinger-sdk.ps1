@@ -133,13 +133,16 @@ function Close-SdkDevice($SdkType, $Device) {
 function Capture-One($SdkType, $Device, [int]$Seconds) {
   $deadline = (Get-Date).AddSeconds($Seconds)
   do {
-    $image = New-Object byte[] 120000
-    $template = New-Object byte[] 2048
-    $templateSize = 2048
-    $args = @($Device, $image, $template, [ref]$templateSize)
+    $image = [byte[]]::new(120000)
+    $template = [byte[]]::new(2048)
+    # Reflection expects a boxed Int32 for an Int32& parameter, not a PSReference.
+    $args = [object[]]@($Device, $image, $template, [int]2048)
     $code = [int](Invoke-SdkMethod $SdkType 'AcquireFingerprint' $args)
+    $templateSize = [int]$args[3]
     if ($code -eq 0 -and $templateSize -gt 0) {
-      return ,$template[0..($templateSize - 1)]
+      $result = [byte[]]::new($templateSize)
+      [Array]::Copy($template, $result, $templateSize)
+      return ,$result
     }
     Start-Sleep -Milliseconds 180
   } while ((Get-Date) -lt $deadline)
@@ -186,12 +189,13 @@ try {
         $db = Invoke-SdkMethod $sdkType 'DBInit'
         if (-not $db -or $db -eq [IntPtr]::Zero) { throw 'DB_INIT_FAILED:No se pudo iniciar el algoritmo de huella' }
         try {
-          $merged = New-Object byte[] 2048
-          $mergedSize = 2048
-          $mergeArgs = @($db, $captured[0], $captured[1], $captured[2], $merged, [ref]$mergedSize)
+          $merged = [byte[]]::new(2048)
+          $mergeArgs = [object[]]@($db, $captured[0], $captured[1], $captured[2], $merged, [int]2048)
           $mergeCode = [int](Invoke-SdkMethod $sdkType 'DBMerge' $mergeArgs)
+          $mergedSize = [int]$mergeArgs[5]
           if ($mergeCode -ne 0 -or $mergedSize -le 0) { throw "ENROLL_MERGE_FAILED:No se pudieron combinar las tres lecturas (codigo $mergeCode)" }
-          $output = $merged[0..($mergedSize - 1)]
+          $output = [byte[]]::new($mergedSize)
+          [Array]::Copy($merged, $output, $mergedSize)
         } finally {
           try { [void](Invoke-SdkMethod $sdkType 'DBFree' @($db)) } catch {}
         }
