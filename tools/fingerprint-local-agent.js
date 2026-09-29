@@ -122,7 +122,12 @@ function parseCaptureResult(stdout, stderr, err) {
 
 function runCaptureCommand(body) {
   if (!CAPTURE_COMMAND && fs.existsSync(SDK_BRIDGE)) {
-    return runSdkBridge('capture', body);
+    return runSdkBridge('capture', body).then(result => {
+      if (result && result.ok === undefined && result.template) {
+        return { ...result, ok: true, mensaje: result.mensaje || 'Huella capturada correctamente' };
+      }
+      return result;
+    });
   }
   return new Promise((resolve) => {
     if (!CAPTURE_COMMAND) {

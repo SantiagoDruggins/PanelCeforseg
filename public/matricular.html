@@ -252,7 +252,7 @@ async function capturarHuellaMatricula(){
       body: JSON.stringify({ purpose:'enroll', dedo })
     });
     const data = await res.json();
-    if(!res.ok || !data.ok || !data.template){
+    if(!res.ok || data.ok === false || !data.template){
       throw new Error(fingerprintErrorMessage(data, 'No se pudo capturar la huella'));
     }
 
