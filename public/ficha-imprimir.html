@@ -173,6 +173,34 @@
       margin-top: 1mm;
       font-size: 16px;
     }
+    .biometric {
+      margin-top: 6mm;
+      display: grid;
+      grid-template-columns: 32mm 1fr;
+      gap: 4mm;
+      border: 1.5px solid #111;
+      padding: 3mm;
+      align-items: center;
+    }
+    .fingerprint-mark {
+      height: 26mm;
+      border: 1.5px solid #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+      font-weight: 900;
+    }
+    .biometric strong {
+      display: block;
+      text-transform: uppercase;
+      font-size: 12px;
+      margin-bottom: 1mm;
+    }
+    .biometric div {
+      font-size: 11px;
+      line-height: 1.45;
+    }
     .signatures {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -287,9 +315,10 @@
 
   Promise.all([
     fetch('/api/estudiantes/' + id, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()),
-    fetch('/api/abonos/' + id, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json())
+    fetch('/api/abonos/' + id, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()),
+    fetch('/api/huellas/' + id, { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()).catch(() => [])
   ])
-    .then(([e, abonos]) => {
+    .then(([e, abonos, huellas]) => {
       if (!e.id) {
         contenido.textContent = 'Estudiante no encontrado';
         return;
@@ -300,6 +329,7 @@
       const totalCursos = cursos.reduce((sum, c) => sum + Number(c.precio || 0), 0);
       const saldoTotal = cursos.reduce((sum, c) => sum + Number(c.saldo || 0), 0);
       const totalPagado = pagos.reduce((sum, a) => sum + Number(a.valor || 0), 0);
+      const huella = Array.isArray(huellas) && huellas.length ? huellas[0] : null;
       const foto = e.foto
         ? `<img src="${escapeHtml(e.foto)}" alt="Foto del alumno">`
         : 'Foto del alumno';
@@ -332,6 +362,21 @@
 
           <div class="field wide"><span class="label">Direccion de residencia</span><div class="value">${escapeHtml(e.direccion)}</div></div>
           <div class="field"><span class="label">Contacto emergencia</span><div class="value">${escapeHtml(e.contacto_emergencia)}</div></div>
+        </section>
+
+        <section class="biometric">
+          <div class="fingerprint-mark">#</div>
+          <div>
+            <strong>Registro biometrico de huella digital</strong>
+            ${huella ? `
+              <div>Estado: HUELLA REGISTRADA EN EL SISTEMA</div>
+              <div>Dedo: ${escapeHtml(huella.dedo || 'indice_derecho')} | Calidad: ${escapeHtml(huella.calidad || '-')}</div>
+              <div>ID biometrico: ${escapeHtml(huella.template_hash_corto || '-')} | Fecha: ${fechaCorta(huella.creado_en)}</div>
+            ` : `
+              <div>Estado: PENDIENTE POR REGISTRAR</div>
+              <div>Este alumno no tiene huella digital asociada en el sistema.</div>
+            `}
+          </div>
         </section>
 
         <div class="section-title">Cursos matriculados</div>

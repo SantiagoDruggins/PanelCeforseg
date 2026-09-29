@@ -76,6 +76,7 @@ const token = localStorage.getItem('token');
 const params = new URLSearchParams(location.search);
 const id = params.get('id');
 const editMode = params.get('edit') === '1';
+const FINGERPRINT_AGENT_URL = 'http://127.0.0.1:17778';
 
 fetch('/layout.html')
   .then(r => r.text())
@@ -90,6 +91,11 @@ async function cargarFicha(){
     headers:{ Authorization:'Bearer ' + token }
   });
   const e = await res.json();
+  const huellasRes = await fetch('/api/huellas/' + id, {
+    headers:{ Authorization:'Bearer ' + token }
+  });
+  const huellas = huellasRes.ok ? await huellasRes.json() : [];
+  const huellaPrincipal = huellas[0] || null;
 
   const content = document.querySelector('.content');
 
@@ -173,9 +179,38 @@ async function cargarFicha(){
             <div class="vf-actions d-flex gap-2 flex-wrap">
               <a href="/estudiante-ficha?id=${id}&edit=1" class="btn btn-warning"><i class="bi bi-pencil-square me-1"></i>Editar estudiante</a>
               <a href="/ficha-imprimir?id=${id}" target="_blank" class="btn btn-outline-primary ms-0"><i class="bi bi-printer me-1"></i>Imprimir ficha</a>
+              <a href="/huellas" class="btn btn-outline-success ms-0"><i class="bi bi-fingerprint me-1"></i>Buscar por huella</a>
             </div>
           `}
         </div>
+      </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+          <div>
+            <h5 class="mb-1"><i class="bi bi-fingerprint me-2"></i>Huella digital</h5>
+            <p class="text-muted small mb-0">Identificacion rapida con ZK9500.</p>
+          </div>
+          <span class="badge ${huellaPrincipal ? 'bg-success' : 'bg-warning text-dark'}">
+            ${huellaPrincipal ? 'Registrada' : 'Pendiente'}
+          </span>
+        </div>
+        <div id="estadoHuellaFicha" class="mt-3">
+          ${huellaPrincipal ? `
+            <div class="alert alert-success mb-2">
+              Huella activa: ${huellaPrincipal.dedo || 'indice_derecho'} | calidad ${huellaPrincipal.calidad || '-'} | ID ${huellaPrincipal.template_hash_corto || '-'}
+            </div>
+          ` : `
+            <div class="alert alert-warning mb-2">
+              Este alumno aun no tiene huella registrada. Capturala para poder encontrarlo rapido.
+            </div>
+          `}
+        </div>
+        <button class="btn btn-outline-primary" onclick="registrarHuellaFicha()">
+          <i class="bi bi-fingerprint me-1"></i>${huellaPrincipal ? 'Actualizar huella' : 'Registrar huella'}
+        </button>
       </div>
     </div>
 
@@ -269,6 +304,41 @@ async function cargarFicha(){
 
   if(editMode){
     cargarCursosDisponiblesParaAgregar(e.cursos);
+  }
+}
+
+async function registrarHuellaFicha(){
+  const estado = document.getElementById('estadoHuellaFicha');
+  estado.innerHTML = '<div class="alert alert-info">Capturando huella... mantenga el dedo quieto sobre el lector.</div>';
+  try{
+    const cap = await fetch(FINGERPRINT_AGENT_URL + '/capture', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ purpose:'enroll', estudiante_id:id, dedo:'indice_derecho' })
+    });
+    const data = await cap.json();
+    if(!cap.ok || !data.ok || !data.template) throw new Error(data.mensaje || 'No se pudo capturar la huella');
+
+    const res = await fetch('/api/huellas', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer ' + token
+      },
+      body: JSON.stringify({
+        estudiante_id: id,
+        dedo:'indice_derecho',
+        template: data.template,
+        calidad: data.quality || data.calidad || null,
+        dispositivo: data.device || data.dispositivo || 'ZK9500'
+      })
+    });
+    const saved = await res.json();
+    if(!res.ok) throw new Error(saved.mensaje || 'No se pudo guardar la huella');
+    alert('Huella registrada correctamente');
+    cargarFicha();
+  }catch(err){
+    estado.innerHTML = '<div class="alert alert-danger">' + err.message + '. Revisa que el agente del huellero este encendido.</div>';
   }
 }
 

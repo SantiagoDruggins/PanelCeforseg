@@ -118,6 +118,29 @@ db.run(`ALTER TABLE estudiantes ADD COLUMN usuario_matricula_id INTEGER REFERENC
 });
 
 /* =========================
+   HUELLAS DIGITALES
+========================= */
+db.run(`
+  CREATE TABLE IF NOT EXISTS huellas_digitales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    estudiante_id INTEGER NOT NULL,
+    dedo TEXT DEFAULT 'indice_derecho',
+    template TEXT NOT NULL,
+    template_hash TEXT UNIQUE NOT NULL,
+    calidad INTEGER,
+    dispositivo TEXT,
+    activo INTEGER DEFAULT 1,
+    creado_por INTEGER,
+    creado_en TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id),
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id)
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_huellas_estudiante ON huellas_digitales(estudiante_id, activo)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_huellas_hash ON huellas_digitales(template_hash)`);
+
+/* =========================
    COMISIONES / NÓMINA
 ========================= */
 db.run(`

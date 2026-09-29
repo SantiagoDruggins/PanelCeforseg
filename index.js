@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const os = require('os');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 const multer = require('multer');
 const jpeg = require('jpeg-js');
@@ -69,6 +70,14 @@ function dbRunAsync(sql, params = []) {
 
 function formatoNumeroFactura(n) {
   return `FAC-${String(Number(n) || 1).padStart(6, '0')}`;
+}
+
+function normalizarTemplateHuella(template) {
+  return String(template || '').trim();
+}
+
+function hashTemplateHuella(template) {
+  return crypto.createHash('sha256').update(normalizarTemplateHuella(template), 'utf8').digest('hex');
 }
 
 function fechaHoraColombiaSQL(date = new Date()) {
@@ -696,6 +705,7 @@ app.get('/estudiantes-panel', (_, res) => res.sendFile(path.join(__dirname, 'pub
 app.get('/estudiante-ficha', (_, res) => res.sendFile(path.join(__dirname, 'public/estudiante-ficha.html')));
 app.get('/matricular', (_, res) => res.sendFile(path.join(__dirname, 'public/matricular.html')));
 app.get('/ppr-antiguos', (_, res) => res.sendFile(path.join(__dirname, 'public/ppr-antiguos.html')));
+app.get('/huellas', (_, res) => res.sendFile(path.join(__dirname, 'public/huellas.html')));
 app.get('/cursos-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/cursos.html')));
 app.get('/usuarios-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/usuarios.html')));
 app.get('/certificados-panel', (_, res) => res.sendFile(path.join(__dirname, 'public/certificados.html')));
@@ -1973,6 +1983,209 @@ app.get('/api/estudiantes/:id',
       }
     );
 });
+
+/* =====================================================
+   HUELLAS DIGITALES
+===================================================== */
+app.get('/api/huellas/:estudiante_id',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const rows = await dbAll(`
+        SELECT h.id, h.estudiante_id, h.dedo, h.calidad, h.dispositivo, h.activo,
+               h.creado_en, h.template_hash, u.usuario AS creado_por_usuario
+        FROM huellas_digitales h
+        LEFT JOIN usuarios u ON u.id = h.creado_por
+        WHERE h.estudiante_id=? AND h.activo=1
+        ORDER BY h.id DESC
+      `, [req.params.estudiante_id]);
+      res.json(rows.map(h => ({
+        ...h,
+        template_hash_corto: h.template_hash ? h.template_hash.slice(0, 12).toUpperCase() : null,
+        template_hash: undefined
+      })));
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error consultando huellas' });
+    }
+  }
+);
+
+app.post('/api/huellas',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const estudianteId = Number(req.body.estudiante_id);
+      const template = normalizarTemplateHuella(req.body.template || req.body.template_base64);
+      if (!estudianteId || !template) {
+        return res.status(400).json({ mensaje: 'Falta estudiante o plantilla de huella' });
+      }
+
+      const estudiante = await dbGet('SELECT id, nombre, cedula FROM estudiantes WHERE id=?', [estudianteId]);
+      if (!estudiante) return res.status(404).json({ mensaje: 'Estudiante no encontrado' });
+
+      const hash = hashTemplateHuella(template);
+      const duplicada = await dbGet(`
+        SELECT h.id, h.estudiante_id, e.nombre, e.cedula
+        FROM huellas_digitales h
+        JOIN estudiantes e ON e.id = h.estudiante_id
+        WHERE h.template_hash=? AND h.activo=1
+      `, [hash]);
+
+      if (duplicada && Number(duplicada.estudiante_id) !== estudianteId) {
+        return res.status(409).json({
+          mensaje: `Esta huella ya esta registrada a ${duplicada.nombre} (${duplicada.cedula || 'sin cedula'})`,
+          estudiante_id: duplicada.estudiante_id
+        });
+      }
+
+      const dedo = String(req.body.dedo || 'indice_derecho').trim();
+      const calidad = req.body.calidad == null ? null : Number(req.body.calidad);
+      const dispositivo = String(req.body.dispositivo || 'ZK9500').trim();
+
+      await dbRunAsync(`
+        INSERT INTO huellas_digitales
+        (estudiante_id, dedo, template, template_hash, calidad, dispositivo, creado_por)
+        VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(template_hash) DO UPDATE SET
+          estudiante_id=excluded.estudiante_id,
+          dedo=excluded.dedo,
+          template=excluded.template,
+          calidad=excluded.calidad,
+          dispositivo=excluded.dispositivo,
+          activo=1
+      `, [estudianteId, dedo, template, hash, Number.isFinite(calidad) ? calidad : null, dispositivo, req.usuario?.id || null]);
+
+      registrarAuditoria(req, 'registrar_huella_digital', 'huellas_digitales', estudianteId, {
+        estudiante_id: estudianteId,
+        dedo,
+        calidad: Number.isFinite(calidad) ? calidad : null,
+        dispositivo,
+        hash: hash.slice(0, 12).toUpperCase()
+      });
+
+      res.json({
+        mensaje: 'Huella registrada',
+        estudiante_id: estudianteId,
+        hash: hash.slice(0, 12).toUpperCase()
+      });
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error registrando huella' });
+    }
+  }
+);
+
+app.post('/api/huellas/buscar',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const template = normalizarTemplateHuella(req.body.template || req.body.template_base64);
+      const hash = req.body.template_hash ? String(req.body.template_hash).trim() : (template ? hashTemplateHuella(template) : '');
+      if (!hash) return res.status(400).json({ mensaje: 'Falta plantilla de huella' });
+
+      const row = await dbGet(`
+        SELECT h.id AS huella_id, h.dedo, h.calidad, h.dispositivo, h.creado_en,
+               e.id, e.nombre, e.cedula, e.telefono, e.estado,
+               GROUP_CONCAT(c.nombre, ', ') AS cursos,
+               IFNULL(SUM(ec.saldo),0) AS saldo
+        FROM huellas_digitales h
+        JOIN estudiantes e ON e.id = h.estudiante_id
+        LEFT JOIN estudiante_cursos ec ON ec.estudiante_id = e.id
+        LEFT JOIN cursos c ON c.id = ec.curso_id
+        WHERE h.template_hash=? AND h.activo=1
+        GROUP BY h.id, e.id
+      `, [hash]);
+
+      if (!row) return res.status(404).json({ mensaje: 'No se encontro estudiante con esa huella' });
+
+      registrarAuditoria(req, 'buscar_estudiante_por_huella', 'huellas_digitales', row.huella_id, {
+        estudiante_id: row.id,
+        hash: hash.slice(0, 12).toUpperCase()
+      });
+
+      res.json({
+        encontrado: true,
+        estudiante: {
+          id: row.id,
+          nombre: row.nombre,
+          cedula: row.cedula,
+          telefono: row.telefono,
+          estado: row.estado,
+          cursos: row.cursos,
+          saldo: row.saldo
+        },
+        huella: {
+          id: row.huella_id,
+          dedo: row.dedo,
+          calidad: row.calidad,
+          dispositivo: row.dispositivo,
+          creado_en: row.creado_en
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error buscando por huella' });
+    }
+  }
+);
+
+app.get('/api/huellas-candidatas',
+  verificarToken,
+  permitirRoles('gerente','secretaria'),
+  async (req, res) => {
+    try {
+      const rows = await dbAll(`
+        SELECT h.id AS huella_id, h.estudiante_id, h.dedo, h.template, h.calidad,
+               e.id, e.nombre, e.cedula, e.telefono, e.estado,
+               GROUP_CONCAT(c.nombre, ', ') AS cursos,
+               IFNULL(SUM(ec.saldo),0) AS saldo
+        FROM huellas_digitales h
+        JOIN estudiantes e ON e.id = h.estudiante_id
+        LEFT JOIN estudiante_cursos ec ON ec.estudiante_id = e.id
+        LEFT JOIN cursos c ON c.id = ec.curso_id
+        WHERE h.activo=1
+        GROUP BY h.id, e.id
+        ORDER BY h.id DESC
+      `);
+      res.json(rows.map(row => ({
+        id: row.huella_id,
+        estudiante_id: row.estudiante_id,
+        dedo: row.dedo,
+        template: row.template,
+        calidad: row.calidad,
+        estudiante: {
+          id: row.id,
+          nombre: row.nombre,
+          cedula: row.cedula,
+          telefono: row.telefono,
+          estado: row.estado,
+          cursos: row.cursos,
+          saldo: row.saldo
+        }
+      })));
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error cargando huellas candidatas' });
+    }
+  }
+);
+
+app.delete('/api/huellas/:id',
+  verificarToken,
+  permitirRoles('gerente'),
+  async (req, res) => {
+    try {
+      const idHuella = Number(req.params.id);
+      const row = await dbGet('SELECT id, estudiante_id FROM huellas_digitales WHERE id=?', [idHuella]);
+      if (!row) return res.status(404).json({ mensaje: 'Huella no encontrada' });
+      await dbRunAsync('UPDATE huellas_digitales SET activo=0 WHERE id=?', [idHuella]);
+      registrarAuditoria(req, 'desactivar_huella_digital', 'huellas_digitales', idHuella, { estudiante_id: row.estudiante_id });
+      res.json({ mensaje: 'Huella desactivada' });
+    } catch (err) {
+      res.status(500).json({ mensaje: 'Error desactivando huella' });
+    }
+  }
+);
 
 /* =====================================================
    EDITAR ESTUDIANTE
