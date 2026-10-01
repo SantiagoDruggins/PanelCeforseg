@@ -86,6 +86,28 @@ body{
   opacity:.95;
 }
 
+.sidebar .menu-maintenance{
+  color:rgba(255,255,255,.68);
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  margin-bottom:8px;
+  font-size:15px;
+  border:1px dashed rgba(255,255,255,.24);
+  background:rgba(255,255,255,.02);
+  cursor:not-allowed;
+}
+
+.sidebar .menu-maintenance i{
+  font-size:16px;
+  width:22px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
 .sidebar hr{
   border-color:rgba(255,255,255,.25);
   margin:18px 0;
@@ -128,7 +150,9 @@ body{
     <a href="/estudiantes-panel"><i class="bi bi-people"></i><span>Estudiantes</span></a>
     <a href="/deudores-panel"><i class="bi bi-exclamation-triangle"></i><span>Deudores / Morosos</span></a>
     <a href="/matricular"><i class="bi bi-plus-circle"></i><span>Matricular</span></a>
-    <a href="/huellas"><i class="bi bi-fingerprint"></i><span>Buscar por huella</span></a>
+    <div class="menu-maintenance" title="Módulo en mantenimiento">
+      <i class="bi bi-fingerprint"></i><span>Huella próximamente</span>
+    </div>
     <a href="/ppr-antiguos"><i class="bi bi-folder-plus"></i><span>PPR antiguos</span></a>
     <a href="/cursos-panel"><i class="bi bi-journal-text"></i><span>Cursos</span></a>
     <a href="/certificados-panel"><i class="bi bi-file-earmark-text"></i><span>Certificados</span></a>

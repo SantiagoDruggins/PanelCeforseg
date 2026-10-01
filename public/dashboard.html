@@ -12,6 +12,9 @@
   .card-acceso a { text-decoration: none; color: inherit; display: block; padding: 1rem; }
   .card-acceso .h5 { margin: 0; }
   .card-acceso small { opacity: .85; }
+  .card-acceso.maintenance-card { border-style: dashed !important; opacity: .72; }
+  .card-acceso.maintenance-card:hover { transform: none; }
+  .card-acceso .maintenance-inner { padding: 1rem; }
   .card-acceso .icono{
     font-size:28px;
     width:44px;
@@ -227,12 +230,12 @@ fetch('/layout.html')
           </div>
         </div>
         <div class="col-md-4">
-          <div class="card shadow rounded-3 card-acceso border-success">
-            <a href="/huellas">
+          <div class="card shadow rounded-3 card-acceso maintenance-card border-secondary">
+            <div class="maintenance-inner">
               <div class="icono"><i class="bi bi-fingerprint"></i></div>
-              <h5 class="mt-2">Buscar por huella</h5>
-              <small class="text-muted">Encontrar alumno rapido con el ZK9500</small>
-            </a>
+              <h5 class="mt-2">Huella digital</h5>
+              <small class="text-muted">Módulo en mantenimiento. Próximamente.</small>
+            </div>
           </div>
         </div>
         <div class="col-md-4">

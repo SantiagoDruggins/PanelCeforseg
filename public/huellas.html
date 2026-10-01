@@ -2,43 +2,27 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Buscar por huella - DENVER LTDA</title>
+<title>Huella digital - CEFORSEG</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-<link href="/fingerprint-fingers.css" rel="stylesheet">
 
 <style>
-.bio-state{
-  border:1px solid #dbe4ef;
-  border-radius:10px;
-  background:#fff;
-  padding:14px;
+.maintenance-wrap{
+  max-width:760px;
+  margin:40px auto;
 }
-.fingerprint-hero{
-  width:112px;
-  height:112px;
+.maintenance-icon{
+  width:96px;
+  height:96px;
   border-radius:50%;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  border:2px solid #0a3b78;
-  color:#0a3b78;
-  background:#f4f8ff;
-}
-.fingerprint-hero i{ font-size:58px; }
-.step-dot{
-  width:28px;
-  height:28px;
-  border-radius:50%;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:800;
-  background:#e7efff;
-  color:#0a3b78;
-  flex:0 0 auto;
+  background:#eef2f7;
+  color:#64748b;
+  font-size:48px;
 }
 </style>
 </head>
@@ -51,227 +35,40 @@ if(!localStorage.getItem('token')) location.href='/login';
 <div id="app"></div>
 
 <script src="/permisos.js"></script>
-<script src="/fingerprint-fingers.js"></script>
 <script>
 if (bloquearModuloAliado('Buscar por huella')) throw new Error('Acceso aliado bloqueado');
-
-const token = localStorage.getItem('token');
-const AGENT_URL = 'http://127.0.0.1:17778';
-let ultimoTemplate = null;
 
 fetch('/layout.html')
   .then(r => r.text())
   .then(html => {
     document.getElementById('app').innerHTML = html;
     aplicarPermisosPanel();
-    render();
-    initFingerprintPicker('dedoPickerBusqueda', 'dedo_busqueda');
-    revisarAgente();
-  });
-
-function authHeaders(extra){
-  return Object.assign({ Authorization:'Bearer ' + token }, extra || {});
-}
-
-function render(){
-  document.querySelector('.content').innerHTML = `
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-      <div>
-        <h3 class="fw-bold mb-1"><i class="bi bi-fingerprint me-2"></i>Buscar por huella</h3>
-        <p class="text-muted mb-0">Captura la huella del alumno y abre su ficha al instante.</p>
-      </div>
-      <a class="btn btn-outline-secondary" href="/matricular"><i class="bi bi-plus-circle me-1"></i> Matricular</a>
-    </div>
-
-    <div id="msg"></div>
-
-    <div class="row g-3">
-      <div class="col-lg-5">
-        <div class="card shadow-sm">
-          <div class="card-body text-center">
-            <div class="fingerprint-hero mb-3"><i class="bi bi-fingerprint"></i></div>
-            <h5 class="fw-bold">ZK9500</h5>
-            <p class="text-muted">Pon el dedo del alumno en el lector y presiona buscar.</p>
-
-            <div id="estadoAgente" class="bio-state text-start mb-3">
-              Revisando agente local...
+    document.querySelector('.content').innerHTML = `
+      <div class="maintenance-wrap">
+        <div class="card shadow-sm border-0">
+          <div class="card-body text-center p-5">
+            <div class="maintenance-icon mb-4">
+              <i class="bi bi-fingerprint"></i>
             </div>
-            ${fingerprintPickerMarkup('dedoPickerBusqueda', 'dedo_busqueda', 'indice_derecho')}
-            <div class="small text-muted text-start mt-2 mb-3">La selección orienta al usuario; la búsqueda compara contra todas las huellas registradas.</div>
-
-            <button class="btn btn-primary btn-lg w-100 mb-2" onclick="buscarPorHuella()">
-              <i class="bi bi-search me-1"></i> Capturar y buscar alumno
-            </button>
-            <button class="btn btn-outline-secondary w-100" onclick="revisarAgente()">
-              <i class="bi bi-arrow-clockwise me-1"></i> Revisar huellero
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-lg-7">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h5 class="fw-bold mb-3">Resultado</h5>
-            <div id="resultado">
-              <div class="text-muted py-5 text-center">
-                <i class="bi bi-person-bounding-box fs-1 d-block mb-2"></i>
-                Esperando captura de huella.
-              </div>
+            <span class="badge bg-secondary mb-3">En mantenimiento</span>
+            <h3 class="fw-bold mb-3">Huella digital</h3>
+            <p class="text-muted mb-4">
+              Estamos terminando la integración del huellero ZK9500.
+              Esta función estará disponible próximamente.
+            </p>
+            <div class="d-flex justify-content-center gap-2 flex-wrap">
+              <a class="btn btn-primary" href="/matricular">
+                <i class="bi bi-plus-circle me-1"></i>Ir a matrícula
+              </a>
+              <a class="btn btn-outline-secondary" href="/estudiantes-panel">
+                <i class="bi bi-people me-1"></i>Ver estudiantes
+              </a>
             </div>
           </div>
         </div>
-
-        <div class="card shadow-sm mt-3">
-          <div class="card-body">
-            <h6 class="fw-bold mb-3">Flujo recomendado</h6>
-            <div class="d-flex gap-2 mb-2"><span class="step-dot">1</span><span>Matricular alumno con foto y huella registrada.</span></div>
-            <div class="d-flex gap-2 mb-2"><span class="step-dot">2</span><span>Cuando llegue el alumno, buscar por huella.</span></div>
-            <div class="d-flex gap-2"><span class="step-dot">3</span><span>Desde la ficha se puede editar, abonar, imprimir ficha o revisar historial.</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-async function revisarAgente(){
-  const box = document.getElementById('estadoAgente');
-  box.innerHTML = '<span class="text-muted">Revisando conexion local...</span>';
-  try{
-    const res = await fetch(AGENT_URL + '/health');
-    const data = await res.json();
-    if(data.ok && data.configurado){
-      box.innerHTML = `
-        <div class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Huellero listo</div>
-        <div class="small text-muted">Agente: ${data.agentPort || 17778} | Dispositivo: ${data.device || 'ZK9500'} | Matching: ${data.matchingConfigurado ? 'SDK' : 'pendiente'}</div>
-      `;
-    }else if(data.ok){
-      box.innerHTML = `
-        <div class="text-warning fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Agente encendido, falta SDK/comando ZKT</div>
-        <div class="small text-muted">${data.mensaje || 'Instala el ZKFinger SDK para Windows y el driver del ZK9500.'}</div>
-      `;
-    }else{
-      throw new Error(data.mensaje || 'Agente no disponible');
-    }
-  }catch(err){
-    box.innerHTML = `
-      <div class="text-danger fw-bold"><i class="bi bi-x-circle me-1"></i>Agente de huella apagado</div>
-      <div class="small text-muted">Instala/enciende el agente local del huellero en el PC de produccion.</div>
-    `;
-  }
-}
-
-async function capturarHuella(){
-  const dedo = document.getElementById('dedo_busqueda').value || 'indice_derecho';
-  const res = await fetch(AGENT_URL + '/capture', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ purpose:'identify', dedo })
-  });
-  const data = await res.json();
-  if(!res.ok || data.ok === false) throw new Error(fingerprintErrorMessage(data, 'No se pudo capturar la huella'));
-  if(!data.template) throw new Error('El lector no devolvio plantilla de huella');
-  ultimoTemplate = data;
-  return data;
-}
-
-async function buscarPorHuella(){
-  const resultado = document.getElementById('resultado');
-  const dedo = document.getElementById('dedo_busqueda').value || 'indice_derecho';
-  const dedoLabel = fingerprintFingerLabel(dedo);
-  resultado.innerHTML = `
-    <div class="text-center py-5">
-      <div class="spinner-border text-primary mb-3"></div>
-      <div class="fw-bold">Capturando huella...</div>
-      <div class="text-muted">Coloque ${dedoLabel.toLowerCase()} y manténgalo quieto sobre el lector.</div>
-    </div>
-  `;
-  try{
-    const captura = await capturarHuella();
-    resultado.innerHTML = `
-      <div class="text-center py-5">
-        <div class="spinner-border text-success mb-3"></div>
-        <div class="fw-bold">Buscando alumno...</div>
       </div>
     `;
-
-    const match = await buscarCoincidenciaLocal(captura.template);
-    if(match && match.estudiante){
-      pintarAlumnoEncontrado(match.estudiante, match.score, match.mode);
-      return;
-    }
-
-    const res = await fetch('/api/huellas/buscar', {
-      method:'POST',
-      headers: authHeaders({ 'Content-Type':'application/json' }),
-      body: JSON.stringify({ template: captura.template })
-    });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.mensaje || 'No se encontro alumno');
-    pintarAlumnoEncontrado(data.estudiante, 100, 'exacto');
-  }catch(err){
-    resultado.innerHTML = `
-      <div class="alert alert-warning">
-        <div class="fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>${fingerprintEscapeHtml(fingerprintErrorMessage(err))}</div>
-        <div class="small">Si es alumno nuevo, matriculalo y registra la huella desde la pantalla de matricula.</div>
-      </div>
-    `;
-  }
-}
-
-async function buscarCoincidenciaLocal(template){
-  const candidatosRes = await fetch('/api/huellas-candidatas', {
-    headers:{ Authorization:'Bearer ' + token }
   });
-  const candidatos = candidatosRes.ok ? await candidatosRes.json() : [];
-  if(!candidatos.length) return null;
-
-  const local = await fetch(AGENT_URL + '/match', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({
-      probe: template,
-      threshold: 60,
-      candidates: candidatos.map(c => ({ id:c.id, template:c.template }))
-    })
-  });
-  const match = await local.json();
-  if(!local.ok || !match.ok || !match.matched) return null;
-  const candidato = candidatos.find(c => String(c.id) === String(match.candidateId));
-  if(!candidato) return null;
-  return {
-    estudiante: candidato.estudiante,
-    score: match.score || 0,
-    mode: match.mode || 'sdk'
-  };
-}
-
-function pintarAlumnoEncontrado(e, score, mode){
-  document.getElementById('resultado').innerHTML = `
-    <div class="alert alert-success">
-      <div class="fw-bold"><i class="bi bi-check-circle me-1"></i>Alumno encontrado por huella</div>
-      <div>${e.nombre || '-'} | CC/NIT ${e.cedula || '-'}</div>
-      <div class="small">Coincidencia: ${score || '-'} | modo: ${mode || 'sdk'}</div>
-    </div>
-    <div class="row g-2 mb-3">
-      <div class="col-md-6"><span class="text-muted small">Telefono</span><div class="fw-bold">${e.telefono || '-'}</div></div>
-      <div class="col-md-6"><span class="text-muted small">Saldo</span><div class="fw-bold">${formatoCOP(e.saldo)}</div></div>
-      <div class="col-12"><span class="text-muted small">Cursos</span><div class="fw-bold">${e.cursos || '-'}</div></div>
-    </div>
-    <div class="d-flex flex-wrap gap-2">
-      <a class="btn btn-primary" href="/estudiante-ficha?id=${e.id}"><i class="bi bi-person-vcard me-1"></i>Abrir ficha / abonar</a>
-      <a class="btn btn-warning" href="/estudiante-ficha?id=${e.id}&edit=1"><i class="bi bi-pencil-square me-1"></i>Editar</a>
-      <a class="btn btn-outline-primary" target="_blank" href="/ficha-imprimir?id=${e.id}"><i class="bi bi-printer me-1"></i>Imprimir ficha</a>
-    </div>
-  `;
-}
-
-function formatoCOP(n){
-  return '$' + Number(n || 0).toLocaleString('es-CO') + ' COP';
-}
 </script>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
